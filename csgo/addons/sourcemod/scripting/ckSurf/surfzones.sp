@@ -161,18 +161,14 @@ public void StartTouch(int client, int action[3])
 		}
 		else if (action[0] == 1 || action[0] == 5) // Start Zone or Speed Start
 		{
-			if (g_Stage[g_iClientInZone[client][2]][client] == 1 && g_bPracticeMode[client]) // If practice mode is on
+			/*if (g_Stage[g_iClientInZone[client][2]][client] == 1 && g_bPracticeMode[client]) // If practice mode is on
 			{
 				Command_goToPlayerCheckpoint(client, 1);
-			}
-			else
-			{
-				g_Stage[g_iClientInZone[client][2]][client] = 1;
-
-				Client_Stop(client, 1);
-				// Resetting last checkpoint
-				lastCheckpoint[g_iClientInZone[client][2]][client] = 1;
-			}
+			}*/
+			g_Stage[g_iClientInZone[client][2]][client] = 1;
+			Client_Stop(client, 1);
+			// Resetting last checkpoint
+			lastCheckpoint[g_iClientInZone[client][2]][client] = 1;
 		}
 		else if (action[0] == 2) // End Zone
 		{
@@ -204,10 +200,11 @@ public void StartTouch(int client, int action[3])
 					//This tempfix probably introduces the exploit that allows huge start speeds
 					Command_normalMode(client, 1); // Temp fix. Need to track stages checkpoints were made in.
 				}
+				/* Allows for practising Telehops.
 				else 
 				{
 					Command_goToPlayerCheckpoint(client, 1);
-				}
+				}*/
 			}
 			else
 			{  // Setting valid to false, in case of checkers
@@ -276,9 +273,15 @@ public void EndTouch(int client, int action[3])
 						ClientCommand(client, "play buttons\\button10.wav");
 						PrintToChat(client, "[%c%s%c] You have noclipped and have not restarted, please type !r to begin your run.", MOSSGREEN, g_szChatPrefix, WHITE);
 					}
+					else if(GetEntityGravity(client) != 0)
+					{
+						PrintToChat(client, "[%c%s%c] Your Gravity (%f) was not correct. You will need to restart to start your time.", MOSSGREEN, g_szChatPrefix, WHITE, GetEntityGravity(client));
+						SetEntityGravity(client, 0.00);
+						ClientCommand(client, "play buttons\\button10.wav");
+					}
 					else if((GetGameTime() - g_fLastTimePracUsed[client]) < 3.0) //practice mode check
 					{
-						PrintToChat(client, "[%c%s%c] You have been using practice in the past few seconds, timer @!!@!@disabled.", MOSSGREEN, g_szChatPrefix, WHITE);
+						PrintToChat(client, "[%c%s%c] You have been using practice in the past few seconds, timer disabled.", MOSSGREEN, g_szChatPrefix, WHITE);
 						ClientCommand(client, "play buttons\\button10.wav");
 					}
 					else
@@ -341,23 +344,29 @@ public void getZoneTeamColor(int team, int color[4])
 
 public void DrawBeamBox(int client)
 {
-	int zColor[4];
-	getZoneTeamColor(g_CurrentZoneTeam[client], zColor);
-	TE_SendBeamBoxToClient(client, g_Positions[client][1], g_Positions[client][0], g_BeamSprite, g_HaloSprite, 0, 30, 1.0, 5.0, 5.0, 2, 1.0, zColor, 0, 1);
-	CreateTimer(1.0, BeamBox, GetClientSerial(client), TIMER_REPEAT);
+	if (IsValidClient(client) && !IsFakeClient(client))
+	{
+		int zColor[4];
+		getZoneTeamColor(g_CurrentZoneTeam[client], zColor);
+		TE_SendBeamBoxToClient(client, g_Positions[client][1], g_Positions[client][0], g_BeamSprite, g_HaloSprite, 0, 30, 1.0, 5.0, 5.0, 2, 1.0, zColor, 0, 1);
+		CreateTimer(1.0, BeamBox, GetClientSerial(client), TIMER_REPEAT);
+	}
 }
 
 public Action BeamBox(Handle timer, any serial)
 {
 	int client = GetClientFromSerial(serial);
-	if (IsClientInGame(client))
+	if (IsValidClient(client) && !IsFakeClient(client))
 	{
-		if (g_Editing[client] == 2)
+		if (IsClientInGame(client) )
 		{
-			int zColor[4];
-			getZoneTeamColor(g_CurrentZoneTeam[client], zColor);
-			TE_SendBeamBoxToClient(client, g_Positions[client][1], g_Positions[client][0], g_BeamSprite, g_HaloSprite, 0, 30, 1.0, 5.0, 5.0, 2, 1.0, zColor, 0, 1);
-			return Plugin_Continue;
+			if (g_Editing[client] == 2)
+			{
+				int zColor[4];
+				getZoneTeamColor(g_CurrentZoneTeam[client], zColor);
+				TE_SendBeamBoxToClient(client, g_Positions[client][1], g_Positions[client][0], g_BeamSprite, g_HaloSprite, 0, 30, 1.0, 5.0, 5.0, 2, 1.0, zColor, 0, 1);
+				return Plugin_Continue;
+			}
 		}
 	}
 	return Plugin_Stop;

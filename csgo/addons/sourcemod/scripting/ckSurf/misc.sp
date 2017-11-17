@@ -913,6 +913,9 @@ public void PrintConsoleInfo(int client)
 
 	PrintToConsole(client, "-----------------------------------------------------------------------------------------------------------");
 	PrintToConsole(client, "This server is running ckSurf v%s - Author: Elzi - Server tickrate: %i", PLUGIN_VERSION, RoundToNearest(fltickrate));
+	#if defined DEV_BUILD 
+		PrintToConsole(client, "THIS PLUGIN VERSION IS A DEVELOPEMNT BUILD. IT SHOULD NOT BE USED IN PRODUCTION");
+	#endif
 	PrintToConsole(client, "This version of ckSurf has been modfied by: jonitaikaponi, nikooo777, connorjan, blackhawk74, ");
 	PrintToConsole(client, "zAfLu, Squallkins, marcowmadeira, 2called-chaos, 1DJ, Maxximou5, peace-maker.");
 	if (iConsoleTimeleft > 0)
@@ -939,7 +942,6 @@ public void PrintConsoleInfo(int client)
 	PrintToConsole(client, "Kills: Time in seconds");
 	PrintToConsole(client, "Assists: Number of % finished on current map");
 	PrintToConsole(client, "Score: How many players are lower ranked than the player. Higher number means higher rank");
-	PrintToConsole(client, "MVP Stars: Number of finished map runs on the current map");
 	PrintToConsole(client, " ");
 	PrintToConsole(client, "Practice Mode:");
 	PrintToConsole(client, "Create checkpoints with !cp / !checkpoint");
@@ -1152,7 +1154,7 @@ public void LimitSpeed(int client)
 	if (CurVelVec[2] == 0.0)
 		CurVelVec[2] = 1.0;
 
-	float currentspeed = SquareRoot(Pow(CurVelVec[0], 2.0) + Pow(CurVelVec[1], 2.0) + Pow(CurVelVec[2], 2.0));
+	float currentspeed = SquareRoot(Pow(CurVelVec[0], 2.0) + Pow(CurVelVec[1], 2.0));
 
 	if (currentspeed > speedCap)
 	{
@@ -3418,6 +3420,12 @@ void SetEntityOpacity(int ent, int iAlpha)
 
 void debug_msg(char[] msg)
 {
-if(g_hDebugMode.BoolValue)
-	LogMessage(msg);
+	bool send = false;
+	if(g_hDebugMode.BoolValue)
+		send = true;
+	#if defined DEV_BUILD 
+	send = true;
+	#endif
+	if(send)
+		LogMessage(msg);
 }
