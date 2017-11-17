@@ -224,6 +224,8 @@ public Action Say_Hook(int client, const char[] command, int argc)
 	GetCmdArgString(sText, sizeof(sText));
 	StripQuotes(sText);
 	TrimString(sText);
+	CRemoveColors(sText, 1024);
+	ReplaceString(sText, 1024, "%", "%%%%");
 
 	// skip if invalid client
 	if (!IsValidClient(client))
@@ -333,13 +335,13 @@ public Action Say_Hook(int client, const char[] command, int argc)
 		Format(sTextFinal, sizeof(sTextFinal), "%s {default}%s{default}", sTextFinal, szChatRank);
 
 	// build: spec/death inserts
-	if (GetClientTeam(client) == TEAM_SPECTATOR)
+	if (GetClientTeam(client) == CS_TEAM_SPECTATOR)
 		Format(sTextFinal, sizeof(sTextFinal), "%s {default}%s", sTextFinal, "*SPEC*");
 	else if (!IsPlayerAlive(client))
 		Format(sTextFinal, sizeof(sTextFinal), "%s {default}%s", sTextFinal, "*DEAD*");
 
 	// build: player name & message
-	if (GetClientTeam(client) == TEAM_SPECTATOR)
+	if (GetClientTeam(client) == CS_TEAM_SPECTATOR)
 		Format(sTextFinal, sizeof(sTextFinal), "%s {grey}%s{default}: %s", sTextFinal, szName, sText);
 	else
 		Format(sTextFinal, sizeof(sTextFinal), "%s {default}%s{default}: %s", sTextFinal, szName, sText);
@@ -579,8 +581,11 @@ public Action OnLogAction(Handle source, Identity ident, int client, int target,
 		else
 			Format(logtag, sizeof(logtag), "OTHER");
 
-		if ((strcmp("playercommands.smx", logtag, false) == 0) || (strcmp("slap.smx", logtag, false) == 0))
+		if ((strcmp("playercommands.smx", logtag, false) == 0) || (strcmp("slap.smx", logtag, false) == 0) || (strcmp("funcommands.smx", logtag, false) == 0))
+		{
+			PrintToChat(client, "[%c%s%c] Your time has been stopped to prevent abuse.", MOSSGREEN, g_szChatPrefix, WHITE);
 			Client_Stop(target, 0);
+		}
 	}
 	return Plugin_Continue;
 }
