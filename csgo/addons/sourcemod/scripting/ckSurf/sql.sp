@@ -6801,40 +6801,255 @@ public int EditTierHandler(Handle menu, MenuAction action, int client, int tier)
 		if(tier == 8)
 		{
 			Format(szQuery, 512, "DELETE FROM ck_maptier WHERE mapname ='%s';",  g_szTierMapName[client] );
+			if (!SQL_FastQuery(g_hDb, szQuery))
+				{
+					PrintToChat(client, "[%c%s%c] Error whilst removing map tier.", MOSSGREEN, g_szChatPrefix, WHITE);
+				}
+			PrintToChat(client, "[%c%s%c] Success: %s tier has been removed.", MOSSGREEN, g_szChatPrefix, WHITE, g_szTierMapName[client]);
 			
 		}
-		else
+		else	
 		{
 			Format(szQuery, 512, "UPDATE ck_maptier SET tier = %i WHERE mapname = '%s';", tier, g_szTierMapName[client] );
+			if (!SQL_FastQuery(g_hDb, szQuery))
+				{
+					PrintToChat(client, "[%c%s%c] Error whilst setting map tier.", MOSSGREEN, g_szChatPrefix, WHITE);
+				}
+			PrintToChat(client, "[%c%s%c] Success: %s tier has been changed to %i", MOSSGREEN, g_szChatPrefix, WHITE,g_szTierMapName[client], tier);
 		}
-	 	g_CurrentTierMenu[client] = tier;
-		SQL_TQuery(g_hDb, db_updateMapTierCallback, szQuery, client, DBPrio_Low);
-		db_selectMapTiers(client, g_CurrentTierMenu[client]);
+	 	//g_CurrentTierMenu[client] = tier;
 	}
 	else
-		if (action == MenuAction_Cancel)
+		if (action == MenuAction_End)
 		{
+			CloseHandle(menu);
 			if (1 <= client <= MaxClients && IsValidClient(client))
 			{
 				if(g_CurrentTierMenu[client] != 10)
 					db_selectMapTiers(client, g_CurrentTierMenu[client]);
-	
 			}
 		}
-		else
-		if (action == MenuAction_End)
-		{
-			CloseHandle(menu);
-		}
 }
-public void db_updateMapTierCallback(Handle owner, Handle hndl, const char[] error, any client)
-{
 
+public void db_selectMapRank(int client, char szSteamId[32], char szMapName[128])
+{
+	char szQuery[256], szMapName2[128];
+	bool found = false;
+
+	for (int i = 0; i < GetArraySize(g_MapList); i++)
+	{
+		GetArrayString(g_MapList, i, szMapName2, sizeof(szMapName2));
+		if (StrEqual(szMapName2, szMapName, false))
+		{
+			found = true;
+			Format(szQuery, sizeof(szQuery), "SELECT steamid, name, mapname, runtimepro FROM ck_playertimes WHERE steamid = '%s' AND mapname = '%s' LIMIT 1;", szSteamId, szMapName2);
+		}
+	}
+
+	if (!found)
+		Format(szQuery, sizeof(szQuery), "SELECT steamid, name, mapname, runtimepro FROM ck_playertimes WHERE steamid = '%s' AND mapname LIKE '%c%s%c' LIMIT 1;", szSteamId, PERCENT, szMapName, PERCENT);
+
+	SQL_TQuery(g_hDb, db_selectMapRankCallback, szQuery, client, DBPrio_Low);
+}
+
+public void db_selectMapRankCallback(Handle owner, Handle hndl, const char[] error, any client)
+{
 	if (hndl == null)
 	{
-		LogError("[%s] SQL Error (db_selectMapWithTierCallback): %s", g_szChatPrefix, error);
-		PrintToChat(client, "[%c%s%c] Error whilst updating map tier.", MOSSGREEN, g_szChatPrefix, WHITE);
+		LogError("[ckSurf] SQL Error (db_selectMapRankCallback): %s", error);
 		return;
 	}
-	PrintToChat(client, "[%c%s%c] Success: %s tier has been changed to %i", MOSSGREEN, g_szChatPrefix, WHITE,g_szTierMapName[client],g_CurrentTierMenu[client]);
+
+	if (SQL_HasResultSet(hndl) && SQL_FetchRow(hndl))
+	{
+		char szSteamId[32];
+		char szName[MAX_NAME_LENGTH];
+		char szMapName[128];
+		float runtimepro;
+		char szTime[32];
+
+		SQL_FetchString(hndl, 0, szSteamId, 32);
+		SQL_FetchString(hndl, 1, szName, MAX_NAME_LENGTH);
+		SQL_FetchString(hndl, 2, szMapName, sizeof(szMapName));
+		runtimepro = SQL_FetchFloat(hndl, 3);
+
+		FormatTimeFloat(client, runtimepro, 3, szTime, sizeof(szTime));
+
+		Handle pack = CreateDataPack();
+		WritePackCell(pack, client);
+		WritePackString(pack, szSteamId);
+		WritePackString(pack, szMapName);
+		WritePackString(pack, szTime);
+		WritePackString(pack, szName);
+
+		char szQuery[1024];
+
+		Format(szQuery, 1024, "SELECT count(name) FROM `ck_playertimes` WHERE `mapname` = '%s';", szMapName);
+		SQL_TQuery(g_hDb, db_SelectTotalMapCompletesCallback, szQuery, pack, DBPrio_Low);
+	}
+	else
+		PrintToChat(client, "[%c%s%c] No result found for player or map", MOSSGREEN, g_szChatPrefix, WHITE);
+}
+
+public void db_SelectTotalMapCompletesCallback(Handle owner, Handle hndl, const char[] error, any pack)
+{
+	if (hndl == null)
+	{
+		LogError("[ckSurf] SQL Error (db_SelectTotalMapCompletesCallback): %s ", error);
+		CloseHandle(pack);
+		return;
+	}
+
+	ResetPack(pack);
+	int client = ReadPackCell(pack);
+	char szSteamId[32];
+	char szMapName[128];
+	ReadPackString(pack, szSteamId, 32);
+	ReadPackString(pack, szMapName, sizeof(szMapName));
+
+	if (SQL_HasResultSet(hndl) && SQL_FetchRow(hndl))
+	{
+		WritePackCell(pack, SQL_FetchInt(hndl, 0));
+
+		char szQuery[512];
+
+		Format(szQuery, sizeof(szQuery), "SELECT name, mapname FROM ck_playertimes WHERE runtimepro <= (SELECT runtimepro FROM ck_playertimes WHERE steamid = '%s' AND mapname = '%s' AND runtimepro > -1.0) AND mapname = '%s' AND runtimepro > -1.0 ORDER BY runtimepro;", szSteamId, szMapName, szMapName);
+		SQL_TQuery(g_hDb, db_SelectPlayersMapRankCallback, szQuery, pack, DBPrio_Low);
+	}
+	else
+		PrintToChat(client, "[%c%s%c] No result found for player or map", MOSSGREEN, g_szChatPrefix, WHITE);
+}
+
+public void db_SelectPlayersMapRankCallback(Handle owner, Handle hndl, const char[] error, any pack)
+{
+	if (hndl == null)
+	{
+		LogError("[ckSurf] SQL Error (db_SelectPlayersMapRankCallback): %s ", error);
+		CloseHandle(pack);
+		return;
+	}
+
+	ResetPack(pack);
+	int client = ReadPackCell(pack);
+	char szSteamId[32], szName[MAX_NAME_LENGTH], szMapName[128], szTime[32];
+	ReadPackString(pack, szSteamId, 32);
+	ReadPackString(pack, szMapName, sizeof(szMapName));
+	int total = ReadPackCell(pack);
+	ReadPackString(pack, szTime, sizeof(szTime));
+	ReadPackString(pack, szName, sizeof(szName));
+	CloseHandle(pack);
+
+	if (SQL_HasResultSet(hndl) && SQL_FetchRow(hndl))
+	{
+		int rank;
+		rank = SQL_GetRowCount(hndl);
+
+		PrintToChatAll("%s %c%s %cis ranked %c#%d%c/%d with a time of %c%s %con %c%s", g_szChatPrefix, YELLOW, szName, WHITE, LIMEGREEN, rank,  WHITE, total, LIMEGREEN, szTime, WHITE, BLUE, szMapName);
+	}
+	else
+		PrintToChat(client, "[%c%s%c] No result found for player or map", MOSSGREEN, g_szChatPrefix, WHITE);
+}
+
+// sm_mrank @x command
+public void db_selectMapRankUnknown(int client, char szMapName[128], int rank)
+{
+	char szQuery[512], szMapName2[128];
+	Handle pack = CreateDataPack();
+	WritePackCell(pack, client);
+	WritePackCell(pack, rank);
+	rank = rank - 1;
+	bool found = false;
+
+	for (int i = 0; i < GetArraySize(g_MapList); i++)
+	{
+		GetArrayString(g_MapList, i, szMapName2, sizeof(szMapName2));
+		if (StrEqual(szMapName2, szMapName, false))
+		{
+			found = true;
+			Format(szQuery, sizeof(szQuery), "SELECT steamid, name, mapname, runtimepro FROM ck_playertimes WHERE mapname = '%s' ORDER BY runtimepro ASC LIMIT %i, 1;", szMapName, rank);
+		}
+	}
+
+	if (!found)
+		Format(szQuery, sizeof(szQuery), "SELECT steamid, name, mapname, runtimepro FROM ck_playertimes WHERE mapname LIKE '%c%s%c' ORDER BY runtimepro ASC LIMIT %i, 1;", szMapName, rank);
+
+	SQL_TQuery(g_hDb, db_selectMapRankUnknownCallback, szQuery, pack, DBPrio_Low);
+}
+
+public void db_selectMapRankUnknownCallback(Handle owner, Handle hndl, const char[] error, any data)
+{
+	if (hndl == null)
+	{
+		LogError("[Surftimer] SQL Error (db_selectMapRankUnknownCallback): %s", error);
+		CloseHandle(data);
+		return;
+	}
+
+	ResetPack(data);
+	int client = ReadPackCell(data);
+	int rank = ReadPackCell(data);
+	CloseHandle(data);
+
+	if (SQL_HasResultSet(hndl) && SQL_FetchRow(hndl))
+	{
+		char szSteamId[32];
+		char szName[MAX_NAME_LENGTH];
+		char szMapName[128];
+		char szTime[32];
+		float runtimepro;
+
+		SQL_FetchString(hndl, 0, szSteamId, 32);
+		SQL_FetchString(hndl, 1, szName, MAX_NAME_LENGTH);
+		SQL_FetchString(hndl, 2, szMapName, sizeof(szMapName));
+		runtimepro = SQL_FetchFloat(hndl, 3);
+
+		FormatTimeFloat(client, runtimepro, 3, szTime, sizeof(szTime));
+
+		Handle pack = CreateDataPack();
+		WritePackCell(pack, client);
+		WritePackCell(pack, rank);
+		WritePackString(pack, szSteamId);
+		WritePackString(pack, szName);
+		WritePackString(pack, szMapName);
+		WritePackString(pack, szTime);
+
+		char szQuery[512];
+
+		Format(szQuery, 512, "SELECT count(name) FROM `ck_playertimes` WHERE `mapname` = '%s'", szMapName);
+		SQL_TQuery(g_hDb, db_SelectTotalMapCompletesUnknownCallback, szQuery, pack, DBPrio_Low);
+	}
+	else
+		PrintToChat(client, "[%c%s%c] No result found for player or map", MOSSGREEN, g_szChatPrefix, WHITE);
+}
+
+public void db_SelectTotalMapCompletesUnknownCallback(Handle owner, Handle hndl, const char[] error, any pack)
+{
+	if (hndl == null)
+	{
+		LogError("[Surftimer] SQL Error (db_SelectTotalMapCompletesUnknownCallback): %s", error);
+		CloseHandle(pack);
+		return;
+	}
+
+	ResetPack(pack);
+	int client = ReadPackCell(pack);
+	int rank = ReadPackCell(pack);
+	char szSteamId[32];
+	char szName[MAX_NAME_LENGTH];
+	char szMapName[128];
+	char szTime[32];
+	ReadPackString(pack, szSteamId, 32);
+	ReadPackString(pack, szName, sizeof(szName));
+	ReadPackString(pack, szMapName, sizeof(szMapName));
+	ReadPackString(pack, szTime, sizeof(szTime));
+	CloseHandle(pack);
+
+	if (SQL_HasResultSet(hndl) && SQL_FetchRow(hndl))
+	{
+		int totalplayers = SQL_FetchInt(hndl, 0);
+
+		PrintToChatAll("%s %c%s %cis ranked %c#%d%c/%d with a time of %c%s %con %c%s", g_szChatPrefix, YELLOW, szName, WHITE, LIMEGREEN, rank, WHITE, totalplayers, LIMEGREEN, szTime, WHITE, BLUE, szMapName);
+	}
+	else
+		PrintToChat(client, "[%c%s%c] No result found for player or map", MOSSGREEN, g_szChatPrefix, WHITE);
 }

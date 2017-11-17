@@ -298,45 +298,17 @@ public Action Command_VoteExtend(int client, int args)
 		PrintToChat(client, "[%c%s%c] This command requires the VIP title.", MOSSGREEN, g_szChatPrefix, WHITE);
 		return Plugin_Handled;
 	}
-
-	if (IsVoteInProgress())
-	{
-		PrintToChat(client, "[%c%s%c] Please wait until the current vote has finished.", MOSSGREEN, g_szChatPrefix, WHITE);
-		return Plugin_Handled;
-	}
-
-	char finalOutput[1024];
-	int timeleft;
-	if (GetMapTimeLeft(timeleft))
-	{
-		int mins, secs;
-		if (timeleft > 0)
-		{
-			mins = timeleft / 60;
-			secs = timeleft % 60;
-			FormatEx(finalOutput, sizeof(finalOutput), "Time remaining for map: %d:%02d", mins, secs);
-			PrintToChat(client, "[%c%s%c] %s", MOSSGREEN, g_szChatPrefix, WHITE, finalOutput);
-			if (mins < g_hVoteExtendMapTimeLimit.IntValue)
-			{
-				PrintToChat(client, "[%c%s%c] Vote Extend can not be used during last %i minute(s) of the game.", MOSSGREEN, g_szChatPrefix, WHITE, g_hVoteExtendMapTimeLimit.IntValue);
-				return Plugin_Handled;
-			}
-
-		}
-	}
-
-	if (timeleft < 0)
-	{
-		PrintToChat(client, "[%c%s%c] Vote Extend can not be used during this time.", MOSSGREEN, g_szChatPrefix, WHITE);
-		return Plugin_Handled;					
-	}
-
 	if (g_VoteExtends >= g_hMaxVoteExtends.IntValue)
 	{
 		PrintToChat(client, "[%c%s%c] There have been too many extends this map.", MOSSGREEN, g_szChatPrefix, WHITE);
 		return Plugin_Handled;
 	}
-
+	if (IsVoteInProgress())
+	{
+		PrintToChat(client, "[%c%s%c] Please wait until the current vote has finished.", MOSSGREEN, g_szChatPrefix, WHITE);
+		return Plugin_Handled;
+	}
+	
 	// Here we go through and make sure this user has not already voted. This persists throughout map.
 	for (int i = 0; i < g_VoteExtends; i++)
 	{
@@ -346,7 +318,30 @@ public Action Command_VoteExtend(int client, int args)
 			return Plugin_Handled;
 		}
 	}
+	char finalOutput[1024];
+	int timeleft;
+	if (GetMapTimeLeft(timeleft))
+	{
+		int mins, secs;
+		if (timeleft > 0)
+		{
+			if (timeleft < g_hVoteExtendMapTimeLimit.IntValue)
+			{
+				PrintToChat(client, "[%c%s%c] Vote Extend can not be used during last %i seconds(s) of the game.", MOSSGREEN, g_szChatPrefix, WHITE, g_hVoteExtendMapTimeLimit.IntValue);
+				return Plugin_Handled;
+			}
+			mins = timeleft / 60;
+			secs = timeleft % 60;
+			FormatEx(finalOutput, sizeof(finalOutput), "Time remaining for map: %d:%02d", mins, secs);
+			PrintToChat(client, "[%c%s%c] %s", MOSSGREEN, g_szChatPrefix, WHITE, finalOutput);
 
+		} 
+		else
+		{
+			PrintToChat(client, "[%c%s%c] Vote Extend can not be used during this time.", MOSSGREEN, g_szChatPrefix, WHITE);
+			return Plugin_Handled;		
+		}
+	}
 	StartVoteExtend(client);
 	char name[MAX_NAME_LENGTH];
 	GetClientName(client, name, sizeof(name));
@@ -876,17 +871,17 @@ public void HideChat(int client)
 	{
 		// Hiding
 		if (g_bViewModel[client])
-			SetEntProp(client, Prop_Send, "m_iHideHUD", GetEntProp(client, Prop_Send, "m_iHideHUD") | HIDE_RADAR | HIDE_CHAT | HIDE_CROSSHAIR);
+			SetEntProp(client, Prop_Send, "m_iHideHUD", GetEntProp(client, Prop_Send, "m_iHideHUD") | HIDE_RADAR | HIDE_CHAT | HIDE_CROSSHAIR | HIDE_ROUNDTIMER);
 		else
-			SetEntProp(client, Prop_Send, "m_iHideHUD", GetEntProp(client, Prop_Send, "m_iHideHUD") | HIDE_RADAR | HIDE_CHAT);
+			SetEntProp(client, Prop_Send, "m_iHideHUD", GetEntProp(client, Prop_Send, "m_iHideHUD") | HIDE_RADAR | HIDE_CHAT | HIDE_ROUNDTIMER);
 	}
 	else
 	{
 		// Displaying
 		if (g_bViewModel[client])
-			SetEntProp(client, Prop_Send, "m_iHideHUD", HIDE_RADAR | HIDE_CROSSHAIR);
+			SetEntProp(client, Prop_Send, "m_iHideHUD", HIDE_RADAR | HIDE_CROSSHAIR | HIDE_ROUNDTIMER);
 		else
-			SetEntProp(client, Prop_Send, "m_iHideHUD", HIDE_RADAR);
+			SetEntProp(client, Prop_Send, "m_iHideHUD", HIDE_RADAR | HIDE_ROUNDTIMER);
 	}
 
 	g_bHideChat[client] = !g_bHideChat[client];
@@ -3099,4 +3094,140 @@ public Action Command_ShowMapTiers(int client, int args)
 	}
 	return Plugin_Handled;
 
+}
+
+// Show Triggers https://forums.alliedmods.net/showthread.php?t=290356
+public Action Command_ToggleTriggers(int client, int args)
+{
+	g_bShowTriggers[client] = !g_bShowTriggers[client];
+
+	if (g_bShowTriggers[client]) 
+		++g_iTriggerTransmitCount;
+	else 
+		--g_iTriggerTransmitCount;
+
+	PrintToChat(client, "[%c%s%c] Triggers Toggled.", MOSSGREEN, g_szChatPrefix, WHITE);	
+
+	TransmitTriggers(g_iTriggerTransmitCount > 0);
+	return Plugin_Handled;
+}
+
+void TransmitTriggers(bool transmit)
+{
+	// Hook only once
+	static bool s_bHooked = false;
+
+	// Have we done this before?
+	if (s_bHooked == transmit)
+		return;
+
+	// Loop through entities
+	char sBuffer[8];
+	int lastEdictInUse = GetEntityCount();
+	for (int entity = MaxClients + 1; entity <= lastEdictInUse; ++entity)
+	{
+		if (!IsValidEdict(entity))
+			continue;
+
+		// Is this entity a trigger?
+		GetEdictClassname(entity, sBuffer, sizeof(sBuffer));
+		if (strcmp(sBuffer, "trigger") != 0)
+			continue;
+
+		// Is this entity's model a VBSP model?
+		GetEntPropString(entity, Prop_Data, "m_ModelName", sBuffer, 2);
+		if (sBuffer[0] != '*') 
+		{
+			// The entity must have been created by a plugin and assigned some random model.
+			// Skipping in order to avoid console spam.
+			continue;
+		}
+
+		// Get flags
+		int effectFlags = GetEntData(entity, g_Offset_m_fEffects);
+		int edictFlags = GetEdictFlags(entity);
+
+		// Determine whether to transmit or not
+		if (transmit) 
+		{
+			effectFlags &= ~EF_NODRAW;
+			edictFlags &= ~FL_EDICT_DONTSEND;
+		} 
+		else 
+		{
+			effectFlags |= EF_NODRAW;
+			edictFlags |= FL_EDICT_DONTSEND;
+		}
+
+		// Apply state changes
+		SetEntData(entity, g_Offset_m_fEffects, effectFlags);
+		ChangeEdictState(entity, g_Offset_m_fEffects);
+		SetEdictFlags(entity, edictFlags);
+
+		// Should we hook?
+		if (transmit)
+			SDKHook(entity, SDKHook_SetTransmit, Hook_SetTriggerTransmit);
+		else
+			SDKUnhook(entity, SDKHook_SetTransmit, Hook_SetTriggerTransmit);
+	}
+	s_bHooked = transmit;
+}
+
+public Action Command_SelectMapTime(int client, int args)
+{
+	if (args == 0)
+	{
+		db_selectMapRank(client, g_szSteamID[client], g_szMapName);
+		return Plugin_Handled;
+	}
+	else
+	{
+		char arg1[128];
+		char arg2[128];
+		GetCmdArg(1, arg1, sizeof(arg1));
+		GetCmdArg(2, arg2, sizeof(arg2));
+
+		// bool bPlayerFound = false;
+		char szSteamId2[32];
+		char szName[MAX_NAME_LENGTH];
+
+		if (StrContains(arg1[0], "surf_", true) != -1) // if arg1 contains a surf map
+		{
+			db_selectMapRank(client, g_szSteamID[client], arg1);
+			return Plugin_Handled;
+		}
+		else if (StrContains(arg1, "@", false) != -1) // Rank Number / Group
+		{
+			int rank;
+			ReplaceString(arg1, 128, "@", "", false);
+			rank = StringToInt(arg1);
+
+			if (!arg2[0])
+				db_selectMapRankUnknown(client, g_szMapName, rank);
+			else
+				db_selectMapRankUnknown(client, arg2, rank);
+
+			return Plugin_Handled;
+		}
+		else // else it will contain a clients name
+		{
+			for (int i = 1; i <= MaxClients; i++)
+			{
+				if (IsValidClient(i))
+				{
+					GetClientName(i, szName, MAX_NAME_LENGTH);
+					StringToUpper(szName);
+					StringToUpper(arg1);
+					if ((StrContains(szName, arg1) != -1))
+						GetClientAuthId(i, AuthId_Steam2, szSteamId2, MAX_NAME_LENGTH, true);
+				}
+			}
+		}
+
+		if (!arg2[0]) // no 2nd argument
+			db_selectMapRank(client, szSteamId2, g_szMapName);
+		else
+			db_selectMapRank(client, szSteamId2, arg2);
+	}
+	return Plugin_Handled;
 }

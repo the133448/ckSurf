@@ -224,6 +224,8 @@ public Action Say_Hook(int client, const char[] command, int argc)
 	GetCmdArgString(sText, sizeof(sText));
 	StripQuotes(sText);
 	TrimString(sText);
+	CRemoveColors(sText, 1024);
+	ReplaceString(sText, 1024, "%", "%%%%");
 
 	// skip if invalid client
 	if (!IsValidClient(client))
@@ -580,7 +582,10 @@ public Action OnLogAction(Handle source, Identity ident, int client, int target,
 			Format(logtag, sizeof(logtag), "OTHER");
 
 		if ((strcmp("playercommands.smx", logtag, false) == 0) || (strcmp("slap.smx", logtag, false) == 0) || (strcmp("funcommands.smx", logtag, false) == 0))
+		{
+			PrintToChat(client, "[%c%s%c] Your time has been stopped to prevent abuse.", MOSSGREEN, g_szChatPrefix, WHITE);
 			Client_Stop(target, 0);
+		}
 	}
 	return Plugin_Continue;
 }
@@ -808,4 +813,14 @@ public MRESReturn DHooks_OnTeleport(int client, Handle hParams)
 public void Hook_PostThinkPost(int entity)
 {
 	SetEntProp(entity, Prop_Send, "m_bInBuyZone", 0);
+}
+
+public Action Hook_SetTriggerTransmit(int entity, int client)
+{
+	if (!g_bShowTriggers[client])
+	{
+		// I will not display myself to this client :(
+		return Plugin_Handled;
+	}
+	return Plugin_Continue;
 }
