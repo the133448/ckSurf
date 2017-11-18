@@ -130,6 +130,9 @@
 
 // Sound Defintions
 #define SOUND_COUNT 100	// The amount of custom sounds that can be added to db. 
+
+// Show Triggers
+#define EF_NODRAW 32
 /*====================================
 =            Enumerations            =
 ====================================*/
@@ -725,6 +728,14 @@ ConVar g_cvar_sv_hibernate_when_empty = null;
 */
 ConVar g_cvar_sv_autobunnyhopping = null;
 
+// Show Triggers https://forums.alliedmods.net/showthread.php?t=290356
+int g_iTriggerTransmitCount;
+bool g_bShowTriggers[MAXPLAYERS + 1];
+int g_Offset_m_fEffects = -1;
+
+// Rate Limiting Commands
+float g_fCommandLastUsed[MAXPLAYERS + 1];
+
 /*=========================================
 =            Predefined arrays            =
 =========================================*/
@@ -979,6 +990,9 @@ public void OnMapStart()
 		g_szUsedVoteExtend[i][0] = '\0';
 
 	g_VoteExtends = 0;
+
+	// Show Triggers
+	g_iTriggerTransmitCount = 0;
 }
 
 public void OnMapEnd()
@@ -1227,6 +1241,14 @@ public void OnClientDisconnect(int client)
 	// Stop recording
 	if (g_hRecording[client] != null)
 		StopRecording(client);
+
+	// Stop Showing Triggers
+	if (g_bShowTriggers[client])
+	{
+		g_bShowTriggers[client] = false;
+		--g_iTriggerTransmitCount;
+		TransmitTriggers(g_iTriggerTransmitCount > 0);
+	}
 }
 
 public void OnSettingChanged(Handle convar, const char[] oldValue, const char[] newValue)
@@ -1970,6 +1992,9 @@ public void OnPluginStart()
 	//RegConsoleCmd("sm_rtimes", Command_rTimes, "[%s] spawns a usp silencer", g_szChatPrefix);
 
 	//client commands
+	RegConsoleCmd("sm_mrank", Command_SelectMapTime, "[ckSurf] Prints a players map record in chat");
+	RegConsoleCmd("sm_triggers", Command_ToggleTriggers, "[ckSurf] Toggle display of map triggers");
+	RegConsoleCmd("sm_showtriggers", Command_ToggleTriggers, "[ckSurf] Toggle display of map triggers");
 	RegConsoleCmd("sm_mapmusic", Client_mapmusic, "[ckSurf] Stops Map Music");
 	RegConsoleCmd("sm_stopmusic", Client_mapmusic, "[ckSurf] Stops Map Music");
 	RegConsoleCmd("sm_musicmute", Client_mapmusic, "[ckSurf] Stops Map Music");
@@ -2113,6 +2138,9 @@ public void OnPluginStart()
 	RegAdminCmd("sm_addspawn", Admin_insertSpawnLocation, g_AdminMenuFlag, "[ckSurf] Changes the position !r takes players to");
 	RegAdminCmd("sm_delspawn", Admin_deleteSpawnLocation, g_AdminMenuFlag, "[ckSurf] Removes custom !r position");
 	RegAdminCmd("sm_clearassists", Admin_ClearAssists, g_AdminMenuFlag, "[ckSurf] Clears assist points (map progress) from all players");
+
+	// Show Triggers
+	g_Offset_m_fEffects = FindSendPropInfo("CBaseEntity", "m_fEffects");
 
 	//chat command listener
 	AddCommandListener(Say_Hook, "say");

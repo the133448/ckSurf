@@ -814,3 +814,13 @@ public void Hook_PostThinkPost(int entity)
 {
 	SetEntProp(entity, Prop_Send, "m_bInBuyZone", 0);
 }
+
+public Action Hook_SetTriggerTransmit(int entity, int client)
+{
+	if (!g_bShowTriggers[client])
+	{
+		// I will not display myself to this client :(
+		return Plugin_Handled;
+	}
+	return Plugin_Continue;
+}
