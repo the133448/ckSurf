@@ -359,7 +359,13 @@ public int TopMenuHandler2(Handle topmenu, TopMenuAction action, TopMenuObject o
 		if (action == TopMenuAction_SelectOption)
 		Admin_ckPanel(param, 0);
 }
-
+public Action Admin_ReloadTier(int client, int args)
+{
+	if (!g_bServerDataLoaded)
+		PrintToChat(client, "[%c%s%c] The server is still being loaded. Please try to reload the tier later.", MOSSGREEN, g_szChatPrefix, WHITE);
+	else
+		db_selectMapTier();
+}
 public Action Admin_insertMapTier(int client, int args)
 {
 	if (!IsValidClient(client))
@@ -408,15 +414,19 @@ public Action Admin_insertTier(int client, int args)
 	if (args > 0)
 	{
 		char arg1[3];
-		int tier, zonegroup;
+		int tier;
 		GetCmdArg(1, arg1, sizeof(arg1));
 		tier = StringToInt(arg1);
 		
-		zonegroup = 0;
-		if ((tier < 8 || tier > 0) && (-1 < zonegroup < g_mapZoneGroupCount))
-		{
-			db_insertMapTier(tier, zonegroup);
-			PrintToChat(client, "[%c%s%c] Set map tier to: %i.", MOSSGREEN, g_szChatPrefix, WHITE, tier);
+		if (tier < 8 || tier > 0) 
+		{	
+			if(-1 < 0 < g_mapZoneGroupCount)
+			{
+				db_insertMapTier(tier, 0);
+				PrintToChat(client, "[%c%s%c] Set map tier to: %i.", MOSSGREEN, g_szChatPrefix, WHITE, tier);
+			}
+			else
+				PrintToChat(client, "[%c%s%c] No Zone have been found for this map.", MOSSGREEN, g_szChatPrefix, WHITE);
 		}
 		else
 			PrintToChat(client, "[%c%s%c] Invalid tier number. Please choose a tier number between 1-7.", MOSSGREEN, g_szChatPrefix, WHITE);
