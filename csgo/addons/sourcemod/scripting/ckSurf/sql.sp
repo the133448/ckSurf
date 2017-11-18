@@ -4015,7 +4015,7 @@ public void SQL_deleteCheckpointsCallback(Handle owner, Handle hndl, const char[
 public void db_insertMapTier(int tier, int zGrp)
 {
 	char szQuery[256];
-	if (g_bTierEntryFound)
+	if (g_bTierFound[zGrp])
 	{
 		if (zGrp > 0)
 		{
@@ -6876,11 +6876,11 @@ public void db_selectMapRankCallback(Handle owner, Handle hndl, const char[] err
 		FormatTimeFloat(client, runtimepro, 3, szTime, sizeof(szTime));
 
 		Handle pack = CreateDataPack();
-		WritePackCell(pack, client);
 		WritePackString(pack, szSteamId);
 		WritePackString(pack, szMapName);
 		WritePackString(pack, szTime);
 		WritePackString(pack, szName);
+		WritePackCell(pack, client);
 
 		char szQuery[1024];
 
@@ -6900,16 +6900,14 @@ public void db_SelectTotalMapCompletesCallback(Handle owner, Handle hndl, const 
 		return;
 	}
 
-	ResetPack(pack);
-	int client = ReadPackCell(pack);
-	char szSteamId[32];
-	char szMapName[128];
-	ReadPackString(pack, szSteamId, 32);
-	ReadPackString(pack, szMapName, sizeof(szMapName));
-
 	if (SQL_HasResultSet(hndl) && SQL_FetchRow(hndl))
 	{
 		WritePackCell(pack, SQL_FetchInt(hndl, 0));
+		ResetPack(pack);
+		char szSteamId[32];
+		char szMapName[128];
+		ReadPackString(pack, szSteamId, 32);
+		ReadPackString(pack, szMapName, sizeof(szMapName));
 
 		char szQuery[512];
 
@@ -6917,7 +6915,7 @@ public void db_SelectTotalMapCompletesCallback(Handle owner, Handle hndl, const 
 		SQL_TQuery(g_hDb, db_SelectPlayersMapRankCallback, szQuery, pack, DBPrio_Low);
 	}
 	else
-		PrintToChat(client, "[%c%s%c] No result found for player or map", MOSSGREEN, g_szChatPrefix, WHITE);
+		CloseHandle(pack);
 }
 
 public void db_SelectPlayersMapRankCallback(Handle owner, Handle hndl, const char[] error, any pack)
@@ -6930,13 +6928,13 @@ public void db_SelectPlayersMapRankCallback(Handle owner, Handle hndl, const cha
 	}
 
 	ResetPack(pack);
-	int client = ReadPackCell(pack);
 	char szSteamId[32], szName[MAX_NAME_LENGTH], szMapName[128], szTime[32];
 	ReadPackString(pack, szSteamId, 32);
 	ReadPackString(pack, szMapName, sizeof(szMapName));
-	int total = ReadPackCell(pack);
 	ReadPackString(pack, szTime, sizeof(szTime));
 	ReadPackString(pack, szName, sizeof(szName));
+	int client = ReadPackCell(pack);
+	int total = ReadPackCell(pack);
 	CloseHandle(pack);
 
 	if (SQL_HasResultSet(hndl) && SQL_FetchRow(hndl))
@@ -6944,7 +6942,7 @@ public void db_SelectPlayersMapRankCallback(Handle owner, Handle hndl, const cha
 		int rank;
 		rank = SQL_GetRowCount(hndl);
 
-		PrintToChatAll("%s %c%s %cis ranked %c#%d%c/%d with a time of %c%s %con %c%s", g_szChatPrefix, YELLOW, szName, WHITE, LIMEGREEN, rank,  WHITE, total, LIMEGREEN, szTime, WHITE, BLUE, szMapName);
+		PrintToChatAll("[%c%s%c] %c%s %cis ranked %c#%d%c/%d with a time of %c%s %con %c%s", MOSSGREEN, g_szChatPrefix, WHITE, YELLOW, szName, WHITE, LIMEGREEN, rank,  WHITE, total, LIMEGREEN, szTime, WHITE, BLUE, szMapName);
 	}
 	else
 		PrintToChat(client, "[%c%s%c] No result found for player or map", MOSSGREEN, g_szChatPrefix, WHITE);
@@ -6971,7 +6969,7 @@ public void db_selectMapRankUnknown(int client, char szMapName[128], int rank)
 	}
 
 	if (!found)
-		Format(szQuery, sizeof(szQuery), "SELECT steamid, name, mapname, runtimepro FROM ck_playertimes WHERE mapname LIKE '%c%s%c' ORDER BY runtimepro ASC LIMIT %i, 1;", szMapName, rank);
+		Format(szQuery, sizeof(szQuery), "SELECT steamid, name, mapname, runtimepro FROM ck_playertimes WHERE mapname LIKE '%c%s%c' ORDER BY runtimepro ASC LIMIT %i, 1;", PERCENT, szMapName, PERCENT, rank);
 
 	SQL_TQuery(g_hDb, db_selectMapRankUnknownCallback, szQuery, pack, DBPrio_Low);
 }
@@ -7048,7 +7046,7 @@ public void db_SelectTotalMapCompletesUnknownCallback(Handle owner, Handle hndl,
 	{
 		int totalplayers = SQL_FetchInt(hndl, 0);
 
-		PrintToChatAll("%s %c%s %cis ranked %c#%d%c/%d with a time of %c%s %con %c%s", g_szChatPrefix, YELLOW, szName, WHITE, LIMEGREEN, rank, WHITE, totalplayers, LIMEGREEN, szTime, WHITE, BLUE, szMapName);
+		PrintToChatAll("[%c%s%c] %c%s %cis ranked %c#%d%c/%d with a time of %c%s %con %c%s", MOSSGREEN, g_szChatPrefix, WHITE, YELLOW, szName, WHITE, LIMEGREEN, rank, WHITE, totalplayers, LIMEGREEN, szTime, WHITE, BLUE, szMapName);
 	}
 	else
 		PrintToChat(client, "[%c%s%c] No result found for player or map", MOSSGREEN, g_szChatPrefix, WHITE);

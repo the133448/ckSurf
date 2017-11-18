@@ -3175,6 +3175,9 @@ void TransmitTriggers(bool transmit)
 
 public Action Command_SelectMapTime(int client, int args)
 {
+	if (!IsValidClient(client) || RateLimit(client))
+		return Plugin_Handled;
+
 	if (args == 0)
 	{
 		db_selectMapRank(client, g_szSteamID[client], g_szMapName);

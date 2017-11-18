@@ -1462,6 +1462,7 @@ public void SetClientDefaults(int client)
   	g_orgBeatSoundId[client] = 2; 
 
 	g_bShowTriggers[client] = false;
+	g_fCommandLastUsed[client] = 0.0;
 }
 
 public void clearPlayerCheckPoints(int client)
@@ -3430,4 +3431,17 @@ void debug_msg(char[] msg)
 	#endif
 	if(send)
 		LogMessage(msg);
+}
+
+public bool RateLimit(int client)
+{
+	float currentTime = GetGameTime();
+	if (currentTime - g_fCommandLastUsed[client] < 2)
+	{
+		PrintToChat(client, "[%c%s%c] Please wait before using this command again", MOSSGREEN, g_szChatPrefix, WHITE);
+		return true;
+	}
+
+	g_fCommandLastUsed[client] = GetGameTime();
+	return false;
 }
