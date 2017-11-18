@@ -418,7 +418,7 @@ public Action Admin_insertTier(int client, int args)
 		GetCmdArg(1, arg1, sizeof(arg1));
 		tier = StringToInt(arg1);
 		
-		if (tier < 8 || tier > 0) 
+		if (0 < tier < 8) 
 		{	
 			if(-1 < 0 < g_mapZoneGroupCount)
 			{

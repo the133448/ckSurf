@@ -3445,3 +3445,25 @@ public bool RateLimit(int client)
 	g_fCommandLastUsed[client] = GetGameTime();
 	return false;
 }
+public void botFix()
+{
+	for (int i = 1; i <= MaxClients; i++)
+		{
+			if (IsValidClient(i))
+			{
+				if (i == g_RecordBot)
+				{
+					StopPlayerMimic(i);
+					KickClient(i);
+					g_bTrailOn[i] = false;
+				}
+				if (i == g_BonusBot)
+				{
+					StopPlayerMimic(i);
+					KickClient(i);
+					g_bTrailOn[i] = false;
+				}
+			}
+		}
+	CreateTimer(1.0, BotRestartTimer);
+}

@@ -274,17 +274,8 @@ public Action Command_extend(int client, int args)
 
 public Action Admin_fixBot(int client, int args)
 {
-	Handle replay = FindConVar("ck_replay_bot");
-	Handle bonus = FindConVar("ck_bonus_bot");
-	
-	
-	SetConVarInt(replay, 0, true, true);
-	SetConVarInt(bonus, 0, true, false);
-	PrintToChatAll("[%c%s%c] Replay bots are being restarted.", MOSSGREEN, g_szChatPrefix, WHITE);
-	//CreateTimer(3.0, RefreshBonusBot, INVALID_HANDLE, TIMER_FLAG_NO_MAPCHANGE);
-	CreateTimer(1.0, BotRestartTimer);
-	//CreateTimer(1.0, RefreshBot);
-	
+	botFix();
+	PrintToChatAll("[%c%s%c] Replay bots are being restarted.", MOSSGREEN, g_szChatPrefix, WHITE);	
 	return Plugin_Handled;
 }
 

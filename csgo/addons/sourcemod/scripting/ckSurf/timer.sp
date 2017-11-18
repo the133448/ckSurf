@@ -529,12 +529,10 @@ public Action TerminateRoundTimer(Handle timer)
 
 public Action BotRestartTimer(Handle timer)
 {
-	Handle replay = FindConVar("ck_replay_bot");
-	Handle bonus = FindConVar("ck_bonus_bot");
-	SetConVarInt(replay, 1, true, true);
-	SetConVarInt(bonus, 1, true, false);
+	LoadReplays();
 	PrintToChatAll("[%c%s%c] Replay bots have been restarted.", MOSSGREEN, g_szChatPrefix, WHITE);
 	return Plugin_Handled;
+	
 }
 
 
