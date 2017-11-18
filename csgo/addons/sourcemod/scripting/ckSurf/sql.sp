@@ -72,7 +72,7 @@ char sql_selectRecordCheckpoints[] = "SELECT zonegroup, cp1, cp2, cp3, cp4, cp5,
 char sql_deleteCheckpoints[] = "DELETE FROM ck_checkpoints WHERE mapname = '%s'";
 
 //TABLE LATEST 15 LOCAL RECORDS
-char sql_createLatestRecords[] = "CREATE TABLE IF NOT EXISTS ck_latestrecords (steamid VARCHAR(32), name VARCHAR(32), runtime FLOAT NOT NULL DEFAULT '-1.0', map VARCHAR(32), date TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY(steamid,map,date));";
+char sql_createLatestRecords[] = "CREATE TABLE IF NOT EXISTS ck_latestrecords (steamid VARCHAR(32), name VARCHAR(32), runtime FLOAT NOT NULL DEFAULT '-1.0', map VARCHAR(32) date, servername VARCHAR(128) TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY(steamid,map,date));";
 char sql_insertLatestRecords[] = "INSERT INTO ck_latestrecords (steamid, name, runtime, map, servername) VALUES('%s','%s','%f','%s', '%s');";
 char sql_selectLatestRecords[] = "SELECT name, runtime, map, date, servername FROM ck_latestrecords ORDER BY date DESC LIMIT 50";
 char sql_select30SecondRecords[] = "SELECT name, runtime, map, date, servername FROM ck_latestrecords WHERE date >= NOW() - INTERVAL 10 second ORDER BY date DESC";
@@ -4143,7 +4143,6 @@ public void SQL_selectMapTierCallback(Handle owner, Handle hndl, const char[] er
 	debug_msg(" Ended SQL_selectMapTierCallback ");
 	if (!g_bServerDataLoaded)
 		db_viewRecordCheckpointInMap();
-
 	return;
 }
 
@@ -6810,7 +6809,14 @@ public int EditTierHandler(Handle menu, MenuAction action, int client, int tier)
 		}
 		else	
 		{
-			Format(szQuery, 512, "UPDATE ck_maptier SET tier = %i WHERE mapname = '%s';", tier, g_szTierMapName[client] );
+			if (g_bTierEntryFound)
+				{
+					Format(szQuery, 256, sql_updatemaptier, tier, g_szTierMapName[client]);
+				}
+				else
+				{
+					Format(szQuery, 256, sql_insertmaptier, g_szTierMapName[client], tier);
+				}
 			if (!SQL_FastQuery(g_hDb, szQuery))
 				{
 					PrintToChat(client, "[%c%s%c] Error whilst setting map tier.", MOSSGREEN, g_szChatPrefix, WHITE);

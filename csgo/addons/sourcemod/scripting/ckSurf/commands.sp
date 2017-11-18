@@ -959,7 +959,6 @@ public Action Client_Wr(int client, int args)
 	}
 	return Plugin_Handled;
 }
-
 public Action Command_Tier(int client, int args)
 {
 	if (IsValidClient(client)) //the second condition is only checked if the first passes
