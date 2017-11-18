@@ -3436,6 +3436,18 @@ void debug_msg(char[] msg)
 public bool RateLimit(int client)
 {
 	float currentTime = GetGameTime();
+	if (currentTime - g_fCommandLastUsed[client] < 0.5)
+	{
+		PrintToChat(client, "[%c%s%c] Please wait before using this command again", MOSSGREEN, g_szChatPrefix, WHITE);
+		return true;
+	}
+
+	g_fCommandLastUsed[client] = GetGameTime();
+	return false;
+}
+public bool RateLimit2(int client)
+{
+	float currentTime = GetGameTime();
 	if (currentTime - g_fCommandLastUsed[client] < 2)
 	{
 		PrintToChat(client, "[%c%s%c] Please wait before using this command again", MOSSGREEN, g_szChatPrefix, WHITE);
@@ -3466,4 +3478,64 @@ public void botFix()
 			}
 		}
 	CreateTimer(1.0, BotRestartTimer);
+}
+void TransmitTriggers(bool transmit)
+{
+	// Hook only once
+	static bool s_bHooked = false;
+
+	// Have we done this before?
+	if (s_bHooked == transmit)
+		return;
+
+	// Loop through entities
+	char sBuffer[8];
+	int lastEdictInUse = GetEntityCount();
+	for (int entity = MaxClients + 1; entity <= lastEdictInUse; ++entity)
+	{
+		if (!IsValidEdict(entity))
+			continue;
+
+		// Is this entity a trigger?
+		GetEdictClassname(entity, sBuffer, sizeof(sBuffer));
+		if (strcmp(sBuffer, "trigger") != 0)
+			continue;
+
+		// Is this entity's model a VBSP model?
+		GetEntPropString(entity, Prop_Data, "m_ModelName", sBuffer, 2);
+		if (sBuffer[0] != '*') 
+		{
+			// The entity must have been created by a plugin and assigned some random model.
+			// Skipping in order to avoid console spam.
+			continue;
+		}
+
+		// Get flags
+		int effectFlags = GetEntData(entity, g_Offset_m_fEffects);
+		int edictFlags = GetEdictFlags(entity);
+
+		// Determine whether to transmit or not
+		if (transmit) 
+		{
+			effectFlags &= ~EF_NODRAW;
+			edictFlags &= ~FL_EDICT_DONTSEND;
+		} 
+		else 
+		{
+			effectFlags |= EF_NODRAW;
+			edictFlags |= FL_EDICT_DONTSEND;
+		}
+
+		// Apply state changes
+		SetEntData(entity, g_Offset_m_fEffects, effectFlags);
+		ChangeEdictState(entity, g_Offset_m_fEffects);
+		SetEdictFlags(entity, edictFlags);
+
+		// Should we hook?
+		if (transmit)
+			SDKHook(entity, SDKHook_SetTransmit, Hook_SetTriggerTransmit);
+		else
+			SDKUnhook(entity, SDKHook_SetTransmit, Hook_SetTriggerTransmit);
+	}
+	s_bHooked = transmit;
 }

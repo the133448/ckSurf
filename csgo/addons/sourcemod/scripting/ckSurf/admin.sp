@@ -1391,3 +1391,30 @@ public Action Admin_DeleteCheckpoints(int client, int args)
 
 	db_deleteCheckpoints();
 }
+
+public Action Command_extend(int client, int args)
+{
+	if (!IsValidClient(client) || RateLimit(client))
+		return Plugin_Handled;
+	if (args < 1)
+	{
+		ReplyToCommand(client, "[SM] Usage: sm_extend <message>");
+		return Plugin_Handled;	
+	}
+	
+	char arg1[3];
+	GetCmdArg(1, arg1, sizeof(arg1));
+	int ExtendAmount = StringToInt(arg1);
+
+	PrintToChatAll("[%c%s%c] The current map has been extended by ADMIN.", MOSSGREEN, g_szChatPrefix, WHITE);
+	ExtendMapTimeLimit(ExtendAmount * 60);
+	return Plugin_Handled;
+}
+public Action Admin_fixBot(int client, int args)
+{
+	if (!IsValidClient(client) || RateLimit(client))
+		return Plugin_Handled;
+	botFix();
+	PrintToChatAll("[%c%s%c] Replay bots are being restarted.", MOSSGREEN, g_szChatPrefix, WHITE);	
+	return Plugin_Handled;
+}
