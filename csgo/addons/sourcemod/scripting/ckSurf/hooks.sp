@@ -363,6 +363,7 @@ public Action Say_Hook(int client, const char[] command, int argc)
 
 public Action Event_OnPlayerTeamJoin(Event event, const char[] name, bool dontBroadcast)
 {
+	
 	if(!g_hAnnouncePlayers.BoolValue)
 	{
 		if(!GetEventBool(event, "silent"))
@@ -375,6 +376,11 @@ public Action Event_OnPlayerTeamJoin(Event event, const char[] name, bool dontBr
 
 public Action Event_OnPlayerTeam(Event event, const char[] name, bool dontBroadcast)
 {
+	if(!botsLoaded)
+	{
+		botFix();
+		botsLoaded = true;
+	}
 	int client = GetClientOfUserId(event.GetInt("userid"));
 	if (!IsValidClient(client) || IsFakeClient(client))
 		return Plugin_Continue;
@@ -583,7 +589,7 @@ public Action OnLogAction(Handle source, Identity ident, int client, int target,
 
 		if ((strcmp("playercommands.smx", logtag, false) == 0) || (strcmp("slap.smx", logtag, false) == 0) || (strcmp("funcommands.smx", logtag, false) == 0))
 		{
-			SetEntityGravity(client, 0.00);
+			SetEntityGravity(client, 0.00); 
 			PrintToChat(client, "[%c%s%c] Your time has been stopped to prevent abuse.", MOSSGREEN, g_szChatPrefix, WHITE);
 			Client_Stop(target, 0);
 		}

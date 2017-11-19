@@ -207,7 +207,6 @@ public Action DelayedStuff(Handle timer)
 
 	LoadReplays();
 	LoadInfoBot();
-	CreateTimer(5.0, BotRestartTimer, INVALID_HANDLE, TIMER_FLAG_NO_MAPCHANGE);
 	return Plugin_Handled;
 }
 public Action animateTimer(Handle timer)
@@ -272,9 +271,6 @@ public Action CKTimer2(Handle timer)
 						ServerCommand("mp_ignore_round_win_conditions 0");
 						PrintToChatAll("%t", "TimeleftCounter", LIGHTRED, WHITE, 1);
 						CreateTimer(1.0, TerminateRoundTimer, INVALID_HANDLE, TIMER_FLAG_NO_MAPCHANGE);
-						for (int i = 1; i <= MaxClients; i++)
-							if(IsValidClient(i))
-								Client_Stop(i, 0);
 					}
 				}
 			}
@@ -531,7 +527,8 @@ public Action TerminateRoundTimer(Handle timer)
 
 public Action BotRestartTimer(Handle timer)
 {
-	botFix();
+	LoadReplays();
+	PrintToChatAll("[%c%s%c] Replay bots have been restarted.", MOSSGREEN, g_szChatPrefix, WHITE);
 	return Plugin_Handled;
 }
 

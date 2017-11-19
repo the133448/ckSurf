@@ -279,7 +279,7 @@ public void EndTouch(int client, int action[3])
 						ClientCommand(client, "play buttons\\button10.wav");
 					}
 					else
-					{	
+					{
 						CL_OnStartTimerPress(client);
 					}
 					g_bValidRun[client] = false;

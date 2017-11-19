@@ -37,8 +37,8 @@
 #pragma semicolon 1
 
 // Plugin info
-#define PLUGIN_VERSION "1.21.3"
-//#define DEV_BUILD
+#define PLUGIN_VERSION "1.21.2.7.6"
+#define DEV_BUILD
 
 // Database definitions
 #define MYSQL 0
@@ -213,6 +213,10 @@ public Plugin myinfo =
 bool stealthFound = false;
 //used to fix the hibernation bug
 bool hasStarted = false;
+//used to reload bots if the first player is joining a team. Bots break if there are no players connected
+//Or if they get loaded before players conenct, this way we load them only after the first player is in game!
+//in theory, but yeah... 
+bool botsLoaded = false;
 /*----------  Stages  ----------*/
 int g_Stage[MAXZONEGROUPS][MAXPLAYERS + 1];						// Which stage is the client in
 bool g_bhasStages; 												// Does the map have stages
@@ -910,7 +914,7 @@ public void OnMapStart()
 	ExplodeString(g_szMapName, "_", g_szMapPrefix, 2, 32);
 
 	//sv_pure 1 could lead to problems with the ckSurf models
-	ServerCommand("sv_pure 0;mp_respawn_on_death_ct 1;mp_respawn_on_death_t 1");
+	ServerCommand("sv_pure 0;mp_respawn_on_death_ct 1;mp_respawn_on_death_t 1"); 
 	
 	//reload language files
 	LoadTranslations("ckSurf.phrases");
@@ -937,7 +941,6 @@ public void OnMapStart()
 	CreateTimer(1.0, CKTimer2, INVALID_HANDLE, TIMER_FLAG_NO_MAPCHANGE | TIMER_REPEAT);
 	CreateTimer(10.0, tierTimer, INVALID_HANDLE, TIMER_FLAG_NO_MAPCHANGE | TIMER_REPEAT);
 	CreateTimer(10.0, Timer_checkforrecord, INVALID_HANDLE, TIMER_FLAG_NO_MAPCHANGE | TIMER_REPEAT);
-	CreateTimer(10.0, BotRestartTimer);
 	CreateTimer(1.5, animateTimer, INVALID_HANDLE, TIMER_FLAG_NO_MAPCHANGE | TIMER_REPEAT);
 	CreateTimer(3.0, advertTimer, INVALID_HANDLE, TIMER_FLAG_NO_MAPCHANGE | TIMER_REPEAT);
 
