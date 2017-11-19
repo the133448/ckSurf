@@ -2320,11 +2320,19 @@ public void QuakeSounds(int client)
 	g_bEnableQuakeSounds[client] = !g_bEnableQuakeSounds[client];
 }
 
-public Action Client_Stop(int client, int args)
+public Action Command_Stop(int client, int args)
 {
 	if (!IsValidClient(client) || RateLimit(client))
 		return Plugin_Handled;
 	if (g_bTimeractivated[client])
+	{
+		Client_Stop(client, 0);
+	}
+	return Plugin_Handled;
+}
+public void Client_Stop(int client, any data) // Bceause this used to be a Commnand Keep the data argument in so we dont have to change every refrence.
+{
+	if (g_bTimeractivated[client] && IsValidClient(client))
 	{
 		//PlayerPanel(client);
 		LimitSpeed(client);
@@ -2332,9 +2340,7 @@ public Action Client_Stop(int client, int args)
 		g_fStartTime[client] = -1.0;
 		g_fCurrentRunTime[client] = -1.0;
 	}
-	return Plugin_Handled;
 }
-
 public void Action_NoClip(int client)
 {
 	if (IsValidClient(client) && !IsFakeClient(client) && IsPlayerAlive(client))

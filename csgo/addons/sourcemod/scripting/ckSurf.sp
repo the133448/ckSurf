@@ -37,7 +37,7 @@
 #pragma semicolon 1
 
 // Plugin info
-#define PLUGIN_VERSION "1.21.2.7.2"
+#define PLUGIN_VERSION "1.21.2.7.3"
 #define DEV_BUILD
 
 // Database definitions
@@ -2032,7 +2032,7 @@ public void OnPluginStart()
 	RegConsoleCmd("sm_topSurfers", Client_Top, "[ckSurf] displays top rankings (Top 100 Players, Top 50 overall)");
 	RegConsoleCmd("sm_bonustop", Client_BonusTop, "[ckSurf] displays top rankings of the bonus");
 	RegConsoleCmd("sm_btop", Client_BonusTop, "[ckSurf] displays top rankings of the bonus");
-	RegConsoleCmd("sm_stop", Client_Stop, "[ckSurf] stops your timer");
+	RegConsoleCmd("sm_stop", Command_Stop, "[ckSurf] stops your timer");
 	RegConsoleCmd("sm_ranks", Client_Ranks, "[ckSurf] prints in chat the available player ranks");
 	RegConsoleCmd("sm_pause", Client_Pause, "[ckSurf] on/off pause (timer on hold and movement frozen)");
 	RegConsoleCmd("sm_showsettings", Client_Showsettings, "[ckSurf] shows ckSurf server settings");
