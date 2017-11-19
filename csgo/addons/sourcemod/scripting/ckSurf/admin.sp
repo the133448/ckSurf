@@ -359,12 +359,17 @@ public int TopMenuHandler2(Handle topmenu, TopMenuAction action, TopMenuObject o
 		if (action == TopMenuAction_SelectOption)
 		Admin_ckPanel(param, 0);
 }
-public Action Admin_ReloadTier(int client, int args)
+public Action Admin_ReloadMap(int client, int args)
 {
 	if (!g_bServerDataLoaded)
-		PrintToChat(client, "[%c%s%c] The server is still being loaded. Please try to reload the tier later.", MOSSGREEN, g_szChatPrefix, WHITE);
-	else
-		db_selectMapTier();
+	{
+		PrintToChat(client, "[%c%s%c] The server is still being loaded. Please try to reload the map later.", MOSSGREEN, g_szChatPrefix, WHITE);
+		return Plugin_Handled;
+	}
+	db_selectMapTier();
+	db_selectMapZones();
+	PrintToChat(client, "[%c%s%c] Map has been reloaded.", MOSSGREEN, g_szChatPrefix, WHITE);
+	return Plugin_Handled;
 }
 public Action Admin_insertMapTier(int client, int args)
 {

@@ -37,7 +37,7 @@
 #pragma semicolon 1
 
 // Plugin info
-#define PLUGIN_VERSION "1.21.2.7.6"
+#define PLUGIN_VERSION "1.21.2.7.7"
 #define DEV_BUILD
 
 // Database definitions
@@ -2141,7 +2141,7 @@ public void OnPluginStart()
 	RegAdminCmd("sm_addmaptier", Admin_insertMapTier, g_AdminMenuFlag, "[ckSurf] Changes maps tier");
 	RegAdminCmd("sm_amt", Admin_insertMapTier, g_AdminMenuFlag, "[ckSurf] Changes maps tier");
 	RegAdminCmd("sm_at", Admin_insertTier, g_AdminMenuFlag, "[ckSurf] Changes maps tier");
-	RegAdminCmd("sm_at", Admin_ReloadTier, ADMFLAG_GENERIC, "[ckSurf] Changes maps tier");
+	RegAdminCmd("sm_reload", Admin_ReloadMap, ADMFLAG_GENERIC, "[ckSurf] Reloads Map Settings");
 	
 	RegAdminCmd("sm_addspawn", Admin_insertSpawnLocation, g_AdminMenuFlag, "[ckSurf] Changes the position !r takes players to");
 	RegAdminCmd("sm_delspawn", Admin_deleteSpawnLocation, g_AdminMenuFlag, "[ckSurf] Removes custom !r position");
