@@ -37,8 +37,8 @@
 #pragma semicolon 1
 
 // Plugin info
-#define PLUGIN_VERSION "1.21.2.7.5"
-#define DEV_BUILD
+#define PLUGIN_VERSION "1.21.3"
+//#define DEV_BUILD
 
 // Database definitions
 #define MYSQL 0
@@ -910,7 +910,7 @@ public void OnMapStart()
 	ExplodeString(g_szMapName, "_", g_szMapPrefix, 2, 32);
 
 	//sv_pure 1 could lead to problems with the ckSurf models
-	ServerCommand("sv_pure 0");
+	ServerCommand("sv_pure 0;mp_respawn_on_death_ct 1;mp_respawn_on_death_t 1");
 	
 	//reload language files
 	LoadTranslations("ckSurf.phrases");

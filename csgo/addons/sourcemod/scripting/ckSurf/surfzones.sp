@@ -273,19 +273,13 @@ public void EndTouch(int client, int action[3])
 						ClientCommand(client, "play buttons\\button10.wav");
 						PrintToChat(client, "[%c%s%c] You have noclipped and have not restarted, please type !r to begin your run.", MOSSGREEN, g_szChatPrefix, WHITE);
 					}
-					else if(GetEntityGravity(client) != 0)
-					{
-						PrintToChat(client, "[%c%s%c] Your Gravity (%f) was not correct. You will need to restart to start your time.", MOSSGREEN, g_szChatPrefix, WHITE, GetEntityGravity(client));
-						SetEntityGravity(client, 0.00);
-						ClientCommand(client, "play buttons\\button10.wav");
-					}
 					else if((GetGameTime() - g_fLastTimePracUsed[client]) < 3.0) //practice mode check
 					{
 						PrintToChat(client, "[%c%s%c] You have been using practice in the past few seconds, timer disabled.", MOSSGREEN, g_szChatPrefix, WHITE);
 						ClientCommand(client, "play buttons\\button10.wav");
 					}
 					else
-					{
+					{	
 						CL_OnStartTimerPress(client);
 					}
 					g_bValidRun[client] = false;
