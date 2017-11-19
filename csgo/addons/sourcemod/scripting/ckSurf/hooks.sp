@@ -363,6 +363,7 @@ public Action Say_Hook(int client, const char[] command, int argc)
 
 public Action Event_OnPlayerTeamJoin(Event event, const char[] name, bool dontBroadcast)
 {
+	
 	if(!g_hAnnouncePlayers.BoolValue)
 	{
 		if(!GetEventBool(event, "silent"))
@@ -375,6 +376,11 @@ public Action Event_OnPlayerTeamJoin(Event event, const char[] name, bool dontBr
 
 public Action Event_OnPlayerTeam(Event event, const char[] name, bool dontBroadcast)
 {
+	if(!botsLoaded)
+	{
+		botFix();
+		botsLoaded = true;
+	}
 	int client = GetClientOfUserId(event.GetInt("userid"));
 	if (!IsValidClient(client) || IsFakeClient(client))
 		return Plugin_Continue;
@@ -583,6 +589,7 @@ public Action OnLogAction(Handle source, Identity ident, int client, int target,
 
 		if ((strcmp("playercommands.smx", logtag, false) == 0) || (strcmp("slap.smx", logtag, false) == 0) || (strcmp("funcommands.smx", logtag, false) == 0))
 		{
+			SetEntityGravity(client, 0.00); 
 			PrintToChat(client, "[%c%s%c] Your time has been stopped to prevent abuse.", MOSSGREEN, g_szChatPrefix, WHITE);
 			Client_Stop(target, 0);
 		}
@@ -813,4 +820,51 @@ public MRESReturn DHooks_OnTeleport(int client, Handle hParams)
 public void Hook_PostThinkPost(int entity)
 {
 	SetEntProp(entity, Prop_Send, "m_bInBuyZone", 0);
+}
+
+public Action Hook_SetTriggerTransmit(int entity, int client)
+{
+	if (!g_bShowTriggers[client])
+	{
+		// I will not display myself to this client :(
+		return Plugin_Handled;
+	}
+	return Plugin_Continue;
+}
+public Action Hook_FootstepCheck(int clients[64], int &numClients, char sample[PLATFORM_MAX_PATH], int &entity, int &channel, float &volume, int &level, int &pitch, int &flags) 
+{
+	// Player
+  if (0 < entity <= MaxClients)
+  {
+		if (StrContains(sample, "land") != -1 || StrContains(sample, "suit_") != -1 || StrContains(sample, "knife") != -1)
+			return Plugin_Handled;
+
+		if (StrContains(sample, "footsteps") != -1 || StrContains(sample, "physics") != -1)
+		{
+			numClients = 1;
+			clients[0] = entity;
+			for (int i = 1; i <= MaxClients; i++)
+			{
+				if (IsValidClient(i) && !IsPlayerAlive(i))
+				{
+					int SpecMode = GetEntProp(i, Prop_Send, "m_iObserverMode");
+					if (SpecMode == 4 || SpecMode == 5)
+					{
+						int Target = GetEntPropEnt(i, Prop_Send, "m_hObserverTarget");
+						if (Target == entity)
+							clients[numClients++] = i;
+					}
+				}
+			}
+			EmitSound(clients, numClients, sample, entity);
+			//return Plugin_Changed;
+
+			return Plugin_Stop;
+		}
+  }
+  return Plugin_Continue;
+}
+public Action Hook_ShotgunShot(const char[] te_name, const int[] players, int numClients, float delay) 
+{
+	return Plugin_Handled;
 }

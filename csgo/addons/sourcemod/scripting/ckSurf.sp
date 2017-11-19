@@ -37,8 +37,8 @@
 #pragma semicolon 1
 
 // Plugin info
-#define PLUGIN_VERSION "1.21.2.6.2"
-#define DEV_BUILD
+#define PLUGIN_VERSION "1.21.3"
+//#define DEV_BUILD
 
 // Database definitions
 #define MYSQL 0
@@ -108,7 +108,7 @@
 #define MAX_SKILLGROUPS 64
 
 // UI definitions
-#define HIDE_RADAR (1 << 12)
+#define HIDE_RADAR (1 << 12)	
 #define HIDE_CHAT ( 1<<7 )
 #define HIDE_ROUNDTIMER (1 << 13)
 #define HIDE_CROSSHAIR 1<<8
@@ -130,6 +130,9 @@
 
 // Sound Defintions
 #define SOUND_COUNT 100	// The amount of custom sounds that can be added to db. 
+
+// Show Triggers
+#define EF_NODRAW 32
 /*====================================
 =            Enumerations            =
 ====================================*/
@@ -210,6 +213,10 @@ public Plugin myinfo =
 bool stealthFound = false;
 //used to fix the hibernation bug
 bool hasStarted = false;
+//used to reload bots if the first player is joining a team. Bots break if there are no players connected
+//Or if they get loaded before players conenct, this way we load them only after the first player is in game!
+//in theory, but yeah... 
+bool botsLoaded = false;
 /*----------  Stages  ----------*/
 int g_Stage[MAXZONEGROUPS][MAXPLAYERS + 1];						// Which stage is the client in
 bool g_bhasStages; 												// Does the map have stages
@@ -474,6 +481,8 @@ ConVar g_hMultiServerMapcycle = null;							// Use multi server mapcycle
 ConVar g_hCustomHud = null;										// Use new style hud or old.
 ConVar g_hMultiServerAnnouncements = null;						// Announce latest records made on another server
 ConVar g_hDebugMode = null;										// Log Debug Messages
+ConVar g_hFootsteps = null;
+
 
 /*----------  SQL Variables  ----------*/
 Handle g_hDb = null; 											// SQL driver
@@ -725,6 +734,14 @@ ConVar g_cvar_sv_hibernate_when_empty = null;
 */
 ConVar g_cvar_sv_autobunnyhopping = null;
 
+// Show Triggers https://forums.alliedmods.net/showthread.php?t=290356
+int g_iTriggerTransmitCount;
+bool g_bShowTriggers[MAXPLAYERS + 1];
+int g_Offset_m_fEffects = -1;
+
+// Rate Limiting Commands
+float g_fCommandLastUsed[MAXPLAYERS + 1];
+
 /*=========================================
 =            Predefined arrays            =
 =========================================*/
@@ -897,7 +914,7 @@ public void OnMapStart()
 	ExplodeString(g_szMapName, "_", g_szMapPrefix, 2, 32);
 
 	//sv_pure 1 could lead to problems with the ckSurf models
-	ServerCommand("sv_pure 0");
+	ServerCommand("sv_pure 0;mp_respawn_on_death_ct 1;mp_respawn_on_death_t 1"); 
 	
 	//reload language files
 	LoadTranslations("ckSurf.phrases");
@@ -924,7 +941,6 @@ public void OnMapStart()
 	CreateTimer(1.0, CKTimer2, INVALID_HANDLE, TIMER_FLAG_NO_MAPCHANGE | TIMER_REPEAT);
 	CreateTimer(10.0, tierTimer, INVALID_HANDLE, TIMER_FLAG_NO_MAPCHANGE | TIMER_REPEAT);
 	CreateTimer(10.0, Timer_checkforrecord, INVALID_HANDLE, TIMER_FLAG_NO_MAPCHANGE | TIMER_REPEAT);
-	
 	CreateTimer(1.5, animateTimer, INVALID_HANDLE, TIMER_FLAG_NO_MAPCHANGE | TIMER_REPEAT);
 	CreateTimer(3.0, advertTimer, INVALID_HANDLE, TIMER_FLAG_NO_MAPCHANGE | TIMER_REPEAT);
 
@@ -979,6 +995,9 @@ public void OnMapStart()
 		g_szUsedVoteExtend[i][0] = '\0';
 
 	g_VoteExtends = 0;
+
+	// Show Triggers
+	g_iTriggerTransmitCount = 0;
 }
 
 public void OnMapEnd()
@@ -1080,7 +1099,9 @@ public void OnClientPutInServer(int client)
 	}
 	else
 		g_MVPStars[client] = 0;
-	
+	// Footsteps
+	if (!IsFakeClient(client))
+		SendConVarValue(client, g_hFootsteps, "0");
 	//client country
 	GetCountry(client);
 	
@@ -1227,6 +1248,14 @@ public void OnClientDisconnect(int client)
 	// Stop recording
 	if (g_hRecording[client] != null)
 		StopRecording(client);
+
+	// Stop Showing Triggers
+	if (g_bShowTriggers[client])
+	{
+		g_bShowTriggers[client] = false;
+		--g_iTriggerTransmitCount;
+		TransmitTriggers(g_iTriggerTransmitCount > 0);
+	}
 }
 
 public void OnSettingChanged(Handle convar, const char[] oldValue, const char[] newValue)
@@ -1743,7 +1772,8 @@ public void OnPluginStart()
 		g_hHudSync = CreateHudSynchronizer();
 	//Get Server Tickate
 	g_Server_Tickrate = RoundFloat(1 / GetTickInterval());
-
+	
+	g_hFootsteps = FindConVar("sv_footsteps");
 	//language file
 	LoadTranslations("ckSurf.phrases");
 
@@ -1970,6 +2000,9 @@ public void OnPluginStart()
 	//RegConsoleCmd("sm_rtimes", Command_rTimes, "[%s] spawns a usp silencer", g_szChatPrefix);
 
 	//client commands
+	RegConsoleCmd("sm_mrank", Command_SelectMapTime, "[ckSurf] Prints a players map record in chat");
+	RegConsoleCmd("sm_triggers", Command_ToggleTriggers, "[ckSurf] Toggle display of map triggers");
+	RegConsoleCmd("sm_showtriggers", Command_ToggleTriggers, "[ckSurf] Toggle display of map triggers");
 	RegConsoleCmd("sm_mapmusic", Client_mapmusic, "[ckSurf] Stops Map Music");
 	RegConsoleCmd("sm_stopmusic", Client_mapmusic, "[ckSurf] Stops Map Music");
 	RegConsoleCmd("sm_musicmute", Client_mapmusic, "[ckSurf] Stops Map Music");
@@ -2007,7 +2040,7 @@ public void OnPluginStart()
 	RegConsoleCmd("sm_topSurfers", Client_Top, "[ckSurf] displays top rankings (Top 100 Players, Top 50 overall)");
 	RegConsoleCmd("sm_bonustop", Client_BonusTop, "[ckSurf] displays top rankings of the bonus");
 	RegConsoleCmd("sm_btop", Client_BonusTop, "[ckSurf] displays top rankings of the bonus");
-	RegConsoleCmd("sm_stop", Client_Stop, "[ckSurf] stops your timer");
+	RegConsoleCmd("sm_stop", Command_Stop, "[ckSurf] stops your timer");
 	RegConsoleCmd("sm_ranks", Client_Ranks, "[ckSurf] prints in chat the available player ranks");
 	RegConsoleCmd("sm_pause", Client_Pause, "[ckSurf] on/off pause (timer on hold and movement frozen)");
 	RegConsoleCmd("sm_showsettings", Client_Showsettings, "[ckSurf] shows ckSurf server settings");
@@ -2108,9 +2141,14 @@ public void OnPluginStart()
 	RegAdminCmd("sm_addmaptier", Admin_insertMapTier, g_AdminMenuFlag, "[ckSurf] Changes maps tier");
 	RegAdminCmd("sm_amt", Admin_insertMapTier, g_AdminMenuFlag, "[ckSurf] Changes maps tier");
 	RegAdminCmd("sm_at", Admin_insertTier, g_AdminMenuFlag, "[ckSurf] Changes maps tier");
+	RegAdminCmd("sm_reload", Admin_ReloadMap, ADMFLAG_GENERIC, "[ckSurf] Reloads Map Settings");
+	
 	RegAdminCmd("sm_addspawn", Admin_insertSpawnLocation, g_AdminMenuFlag, "[ckSurf] Changes the position !r takes players to");
 	RegAdminCmd("sm_delspawn", Admin_deleteSpawnLocation, g_AdminMenuFlag, "[ckSurf] Removes custom !r position");
 	RegAdminCmd("sm_clearassists", Admin_ClearAssists, g_AdminMenuFlag, "[ckSurf] Clears assist points (map progress) from all players");
+
+	// Show Triggers
+	g_Offset_m_fEffects = FindSendPropInfo("CBaseEntity", "m_fEffects");
 
 	//chat command listener
 	AddCommandListener(Say_Hook, "say");
@@ -2139,6 +2177,10 @@ public void OnPluginStart()
 	HookEvent("player_team", Event_OnPlayerTeam, EventHookMode_Post);
 	HookEvent("player_team", Event_OnPlayerTeamJoin, EventHookMode_Pre);
 	HookEvent("player_disconnect", Event_PlayerDisconnect, EventHookMode_Pre);
+	AddTempEntHook("Shotgun Shot", Hook_ShotgunShot);
+
+	// Footsteps
+	AddNormalSoundHook(Hook_FootstepCheck);
 
 	//mapcycle array
 	int arraySize = ByteCountToCells(PLATFORM_MAX_PATH);

@@ -158,7 +158,7 @@ public Action tierTimer(Handle timer)
 	{
 		if (IsValidClient(client) && (CheckCommandAccess(client, "sm_at", ADMFLAG_GENERIC, false)))
 		{	
-			if(!g_bTierFound[0])
+			if(!g_bTierFound[0] || (-1 < 0 < g_mapZoneGroupCount))
 			{
 				PrintToChat(client, "[%c%s%c] %cPlease give this map a tier. write %c!at <tiernumber>%c.", MOSSGREEN, g_szChatPrefix, WHITE, RED, YELLOW,RED);
 			}
@@ -270,8 +270,6 @@ public Action CKTimer2(Handle timer)
 						g_bRoundEnd = true;
 						ServerCommand("mp_ignore_round_win_conditions 0");
 						PrintToChatAll("%t", "TimeleftCounter", LIGHTRED, WHITE, 1);
-						for (int i = 1; i <= MaxClients; i++)
-							ForcePlayerSuicide(i);
 						CreateTimer(1.0, TerminateRoundTimer, INVALID_HANDLE, TIMER_FLAG_NO_MAPCHANGE);
 					}
 				}
@@ -529,10 +527,7 @@ public Action TerminateRoundTimer(Handle timer)
 
 public Action BotRestartTimer(Handle timer)
 {
-	Handle replay = FindConVar("ck_replay_bot");
-	Handle bonus = FindConVar("ck_bonus_bot");
-	SetConVarInt(replay, 1, true, true);
-	SetConVarInt(bonus, 1, true, false);
+	LoadReplays();
 	PrintToChatAll("[%c%s%c] Replay bots have been restarted.", MOSSGREEN, g_szChatPrefix, WHITE);
 	return Plugin_Handled;
 }
@@ -545,10 +540,12 @@ public Action WelcomeMsgTimer(Handle timer, any serial)
 	char szBuffer[512];
 	GetConVarString(g_hWelcomeMsg, szBuffer, 512);
 	if (IsValidClient(client) && !IsFakeClient(client) && szBuffer[0])
+	{
 		CPrintToChat(client, "%s", szBuffer);
-	#if defined DEV_BUILD 
-	PrintToChat(client, "THIS PLUGIN VERSION IS A DEVELOPEMNT BUILD. IT SHOULD NOT BE USED IN PRODUCTION.");
-	#endif
+		#if defined DEV_BUILD 
+		PrintToChat(client, "[CKSURF]THIS PLUGIN VERSION (V%s.DEV) IS A DEVELOPEMNT BUILD. IT SHOULD NOT BE USED IN PRODUCTION.", PLUGIN_VERSION);
+		#endif
+	}
 	return Plugin_Handled;
 }
 
