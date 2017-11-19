@@ -545,7 +545,7 @@ public Action WelcomeMsgTimer(Handle timer, any serial)
 	if (IsValidClient(client) && !IsFakeClient(client) && szBuffer[0])
 		CPrintToChat(client, "%s", szBuffer);
 	#if defined DEV_BUILD 
-	PrintToChat(client, "THIS PLUGIN VERSION IS A DEVELOPEMNT BUILD. IT SHOULD NOT BE USED IN PRODUCTION.");
+	PrintToChat(client, "[CKSURF]THIS PLUGIN VERSION (V%s.DEV) IS A DEVELOPEMNT BUILD. IT SHOULD NOT BE USED IN PRODUCTION.", PLUGIN_VERSION);
 	#endif
 	return Plugin_Handled;
 }
