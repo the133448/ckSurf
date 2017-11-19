@@ -37,7 +37,7 @@
 #pragma semicolon 1
 
 // Plugin info
-#define PLUGIN_VERSION "1.21.2.7.3"
+#define PLUGIN_VERSION "1.21.2.7.4"
 #define DEV_BUILD
 
 // Database definitions
@@ -108,7 +108,7 @@
 #define MAX_SKILLGROUPS 64
 
 // UI definitions
-#define HIDE_RADAR (1 << 12)
+#define HIDE_RADAR (1 << 12)	
 #define HIDE_CHAT ( 1<<7 )
 #define HIDE_ROUNDTIMER (1 << 13)
 #define HIDE_CROSSHAIR 1<<8
@@ -477,6 +477,8 @@ ConVar g_hMultiServerMapcycle = null;							// Use multi server mapcycle
 ConVar g_hCustomHud = null;										// Use new style hud or old.
 ConVar g_hMultiServerAnnouncements = null;						// Announce latest records made on another server
 ConVar g_hDebugMode = null;										// Log Debug Messages
+ConVar g_hFootsteps = null;
+
 
 /*----------  SQL Variables  ----------*/
 Handle g_hDb = null; 											// SQL driver
@@ -1094,7 +1096,9 @@ public void OnClientPutInServer(int client)
 	}
 	else
 		g_MVPStars[client] = 0;
-	
+	// Footsteps
+	if (!IsFakeClient(client))
+		SendConVarValue(client, g_hFootsteps, "0");
 	//client country
 	GetCountry(client);
 	
@@ -1765,7 +1769,8 @@ public void OnPluginStart()
 		g_hHudSync = CreateHudSynchronizer();
 	//Get Server Tickate
 	g_Server_Tickrate = RoundFloat(1 / GetTickInterval());
-
+	
+	g_hFootsteps = FindConVar("sv_footsteps");
 	//language file
 	LoadTranslations("ckSurf.phrases");
 
@@ -2169,6 +2174,10 @@ public void OnPluginStart()
 	HookEvent("player_team", Event_OnPlayerTeam, EventHookMode_Post);
 	HookEvent("player_team", Event_OnPlayerTeamJoin, EventHookMode_Pre);
 	HookEvent("player_disconnect", Event_PlayerDisconnect, EventHookMode_Pre);
+	AddTempEntHook("Shotgun Shot", Hook_ShotgunShot);
+
+	// Footsteps
+	AddNormalSoundHook(Hook_FootstepCheck);
 
 	//mapcycle array
 	int arraySize = ByteCountToCells(PLATFORM_MAX_PATH);
