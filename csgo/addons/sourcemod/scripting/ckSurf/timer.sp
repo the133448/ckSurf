@@ -207,6 +207,7 @@ public Action DelayedStuff(Handle timer)
 
 	LoadReplays();
 	LoadInfoBot();
+	CreateTimer(5.0, BotRestartTimer, INVALID_HANDLE, TIMER_FLAG_NO_MAPCHANGE);
 	return Plugin_Handled;
 }
 public Action animateTimer(Handle timer)
@@ -270,9 +271,10 @@ public Action CKTimer2(Handle timer)
 						g_bRoundEnd = true;
 						ServerCommand("mp_ignore_round_win_conditions 0");
 						PrintToChatAll("%t", "TimeleftCounter", LIGHTRED, WHITE, 1);
-						for (int i = 1; i <= MaxClients; i++)
-							ForcePlayerSuicide(i);
 						CreateTimer(1.0, TerminateRoundTimer, INVALID_HANDLE, TIMER_FLAG_NO_MAPCHANGE);
+						for (int i = 1; i <= MaxClients; i++)
+							if(IsValidClient(i))
+								Client_Stop(i, 0);
 					}
 				}
 			}
@@ -529,10 +531,8 @@ public Action TerminateRoundTimer(Handle timer)
 
 public Action BotRestartTimer(Handle timer)
 {
-	LoadReplays();
-	PrintToChatAll("[%c%s%c] Replay bots have been restarted.", MOSSGREEN, g_szChatPrefix, WHITE);
+	botFix();
 	return Plugin_Handled;
-	
 }
 
 
@@ -543,10 +543,12 @@ public Action WelcomeMsgTimer(Handle timer, any serial)
 	char szBuffer[512];
 	GetConVarString(g_hWelcomeMsg, szBuffer, 512);
 	if (IsValidClient(client) && !IsFakeClient(client) && szBuffer[0])
+	{
 		CPrintToChat(client, "%s", szBuffer);
-	#if defined DEV_BUILD 
-	PrintToChat(client, "[CKSURF]THIS PLUGIN VERSION (V%s.DEV) IS A DEVELOPEMNT BUILD. IT SHOULD NOT BE USED IN PRODUCTION.", PLUGIN_VERSION);
-	#endif
+		#if defined DEV_BUILD 
+		PrintToChat(client, "[CKSURF]THIS PLUGIN VERSION (V%s.DEV) IS A DEVELOPEMNT BUILD. IT SHOULD NOT BE USED IN PRODUCTION.", PLUGIN_VERSION);
+		#endif
+	}
 	return Plugin_Handled;
 }
 
