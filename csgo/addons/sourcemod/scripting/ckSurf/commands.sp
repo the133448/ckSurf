@@ -2407,7 +2407,7 @@ public void ckTopMenu(int client)
 	menu.SetTitle("ckSurf - Top Menu");
 	if (g_hPointSystem.BoolValue)
 		menu.AddItem("Top 100 Players", "Top 100 Players");
-	menu.AddItem("Top 5 Challengers", "Top 5 Challengers");
+	menu.AddItem("Top 5 Challengers", "Top 5 Challengers", false); //fkn stupid sql query disableed until we fix the query
 	menu.AddItem("Map Top", "Map Top");
 	menu.AddItem("Bonus Top", "Bonus Top", !g_bhasBonus);
 	menu.OptionFlags = MENUFLAG_BUTTON_EXIT;

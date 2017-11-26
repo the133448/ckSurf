@@ -37,7 +37,7 @@
 #pragma semicolon 1
 
 // Plugin info
-#define PLUGIN_VERSION "1.21.4.2"
+#define PLUGIN_VERSION "1.21.4.4"
 #define DEV_BUILD
 
 // Database definitions
@@ -1141,6 +1141,9 @@ public void OnClientPutInServer(int client)
 			8. Load client checkpoints (db_viewCheckpoints)
 		*/
 		g_bLoadingSettings[client] = true;
+		char msg[256];
+		Format(msg, 256, "Begun Loading: client %s", g_szSteamID[client]);
+		debug_msg(msg);
 		db_viewPersonalRecords(client, g_szSteamID[client], g_szMapName);
 	}
 }

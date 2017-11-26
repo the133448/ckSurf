@@ -20,8 +20,8 @@ char sql_selectPlayerFlags[] = "SELECT vip, mapper, teacher, custom1, custom2, c
 //TABLE CHALLENGE
 char sql_createChallenges[] = "CREATE TABLE IF NOT EXISTS ck_challenges (steamid VARCHAR(32), steamid2 VARCHAR(32), bet INT(12) unsigned, map VARCHAR(32), date TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY(steamid,steamid2,date));";
 char sql_insertChallenges[] = "INSERT INTO ck_challenges (steamid, steamid2, bet, map) VALUES('%s','%s','%i','%s');";
-char sql_selectChallenges2[] = "SELECT steamid, steamid2, bet, map, date FROM ck_challenges where steamid = '%s' OR steamid2 ='%s' ORDER BY date DESC";
-char sql_selectChallenges[] = "SELECT steamid, steamid2, bet, map FROM ck_challenges where steamid = '%s' OR steamid2 ='%s'";
+char sql_selectChallenges2[] = "SELECT steamid, steamid2, bet, map, date FROM ck_challenges where steamid = '%s' UNION SELECT steamid, steamid2, bet, map, date FROM ck_challenges where steamid2 = '%s ORDER BY date DESC";
+char sql_selectChallenges[] = "SELECT steamid, steamid2, bet, map FROM ck_challenges where steamid = '%s' UNION SELECT steamid, steamid2, bet, map FROM ck_challenges where steamid2 = '%s'";
 char sql_selectChallengesCompare[] = "SELECT steamid, steamid2, bet FROM ck_challenges where (steamid = '%s' AND steamid2 ='%s') OR (steamid = '%s' AND steamid2 ='%s')";
 char sql_deleteChallenges[] = "DELETE from ck_challenges where steamid = '%s'";
 
@@ -160,7 +160,7 @@ char sql_selectTieredMaps[] = "SELECT distinct z.mapname as 'mapname', IFNULL((S
 // Ranks TODO
 char sql_createRanks[] = "CREATE TABLE IF NOT EXISTS `ck_ranks` ( `points` int(7) NOT NULL, `num` int(7) DEFAULT NULL, PRIMARY KEY (`points`) ) ENGINE=MyISAM DEFAULT CHARSET=utf8";
 char sql_UpdateRanks[] = "insert into ck_ranks(points,num) select points,count(*) from ck_playerrank group by points;";
-char sql_createSPRanks[] = "DELIMITER // CREATE PROCEDURE `updatePoints` (OldScore INT, NewScore INT) BEGIN INSERT INTO ck_ranks (points,num) VALUES (NewScore,1) ON DUPLICATE KEY UPDATE num = num + 1; UPDATE ck_ranks SET num = num - 1 WHERE points = OldScore; DELETE FROM ck_ranks WHERE num = 0 AND points = OldScore; SELECT SUM(num) FROM ck_ranks WHERE points >= newscore; END// DELIMITER ;";
+//char sql_createSPRanks[] = "CREATE PROCEDURE updatePoints() (OldScore INT, NewScore INT) BEGIN INSERT INTO ck_ranks (points,num) VALUES (NewScore,1) ON DUPLICATE KEY UPDATE num = num + 1; UPDATE ck_ranks SET num = num - 1 WHERE points = OldScore; DELETE FROM ck_ranks WHERE num = 0 AND points = OldScore; SELECT SUM(num) FROM ck_ranks WHERE points >= newscore; END$$";
 
 
 
@@ -264,7 +264,6 @@ public void db_setupDatabase()
 	//db_loadCustomSounds();
 	for (int i = 0; i < sizeof(g_failedTransactions); i++)
 		g_failedTransactions[i] = 0;
-
 	//txn_addExtraCheckpoints();
 	if (!SQL_FastQuery(g_hDb, "SELECT points FROM ck_ranks LIMIT 1;"))
 	{
@@ -272,34 +271,85 @@ public void db_setupDatabase()
 	}
 	return;
 }
-
 void txn_add_ck_ranks()
 {
 	PrintToServer("---------------------------------------------------------------------------");
 	disableServerHibernate();
 	PrintToServer("[%s] Started to make changes to database. Updating from 1.21.3 -> 1.21.4.", g_szChatPrefix);
 	PrintToServer("[%s] WARNING: DO NOT CONNECT TO THE SERVER, OR CHANGE MAP!", g_szChatPrefix);
+	SQL_LockDatabase(g_hDb);
+	SQL_FastQuery(g_hDb, "DELIMITER ;;");
+	SQL_FastQuery(g_hDb, "DROP PROCEDURE IF EXISTS updatePoints;;");
+	char[] sQuery = new char[1024];
+	FormatEx(sQuery, 1024,
+		"CREATE PROCEDURE updatePoints(OldScore INT, NewScore INT) BEGIN "...
+		"INSERT INTO ck_ranks (points,num) "...
+		"VALUES (NewScore, "...
+		        "1) ON DUPLICATE KEY "...
+		"UPDATE num = num + 1; "...
+		"UPDATE ck_ranks "...
+		"SET num = num - 1 "...
+		"WHERE points = OldScore; "...
+		  "DELETE "...
+		  "FROM ck_ranks WHERE num = 0 "...
+		  "AND points = OldScore; "...
+		  "SELECT SUM(num) "...
+		  "FROM ck_ranks WHERE points >= newscore; END;;");
+	
+	
+	if(!SQL_FastQuery(g_hDb, sQuery))
+	{
+		char[] sError = new char[255];
+		SQL_GetError(g_hDb, sError, 255);
+		PrintToServer("[%s]: Couldn't make changes into the database. Stored Procedure Create error: %s", g_szChatPrefix, sError);
+		SQL_UnlockDatabase(g_hDb);
+		return;
+	}
+	SQL_FastQuery(g_hDb, "DELIMITER ;");
+	SQL_UnlockDatabase(g_hDb);
+	
 	
 	g_bInTransactionChain = true;
 	Transaction h_ranks = SQL_CreateTransaction();
 	SQL_AddQuery(h_ranks, sql_createRanks);
 	SQL_AddQuery(h_ranks, sql_UpdateRanks);
-	//SQL_AddQuery(h_ranks, sql_createSPRanks);
-	SQL_AddQuery(h_ranks, "CREATE INDEX `idx_ck_playerrank_points`  ON `ck_playerrank` (points);");
-	SQL_AddQuery(h_ranks, "CREATE INDEX `idx_ck_ranks_points`  ON `ck_ranks` (points);");
-	SQL_AddQuery(h_ranks, "CREATE INDEX `idx_ck_latestrecords_date`  ON `ck_latestrecords` (date);");
-	SQL_AddQuery(h_ranks, "ALTER TABLE `ck_playertemp` ADD COLUMN `datetime` DATETIME NOT NULL DEFAULT NOW() AFTER `zonegroup`;");
 	SQL_ExecuteTransaction(g_hDb, h_ranks, SQLTXNRankSucces, SQLTXNRankFail);
 }
 public void SQLTXNRankSucces(Handle db, any data, int numQueries, Handle[] results, any[] queryData)
 {
-	g_bInTransactionChain = false;
-	revertServerHibernateSettings();
+	
+	SQL_FastQuery(g_hDb, "CREATE INDEX `idx_ck_playerrank_points`  ON `ck_playerrank` (points);");
+	checkError(g_hDb);
+	SQL_FastQuery(g_hDb, "CREATE INDEX `idx_ck_ranks_points`  ON `ck_ranks` (points);");
+	checkError(g_hDb);
+	SQL_FastQuery(g_hDb, "CREATE INDEX `idx_ck_latestrecords_date`  ON `ck_latestrecords` (date);");
+	checkError(g_hDb);
+	SQL_FastQuery(g_hDb, "ALTER TABLE `ck_zones`   ADD INDEX `IDX_ZONETYPE` (`zonetype` ASC, `mapname` ASC),  ADD INDEX `IDX_ZONE` (`mapname` ASC, `zonegroup` ASC, `zonetype` ASC),  ADD INDEX `IDX_MAPNAME` (`mapname` ASC);");
+	checkError(g_hDb);
+	SQL_FastQuery(g_hDb, "CREATE INDEX `idx_ck_challenges_steamid`  ON `ck_challenges` (steamid) ;");
+	checkError(g_hDb);
+	SQL_FastQuery(g_hDb, "CREATE INDEX `idx_ck_challenges_steamid`  ON `ck_challenges` (steamid2);");
+	checkError(g_hDb);
+	SQL_FastQuery(g_hDb, "CREATE INDEX `idx_ck_playerrank_name`  ON `ck_playerrank` (name); ");
+	checkError(g_hDb);
+	SQL_FastQuery(g_hDb, "ALTER TABLE `ck_playertemp` ADD COLUMN `datetime` DATETIME NOT NULL DEFAULT NOW() AFTER `zonegroup`;");
+	checkError(g_hDb);
 	PrintToServer("[%s] All changes succesfully done! Changing map!", g_szChatPrefix);
+	
 	PrintToServer("---------------------------------------------------------------------------");
 	char szBuffer[256];
 	Format(szBuffer, sizeof(szBuffer), "[%s] Database Update Success! Changing map!", g_szChatPrefix);
 	ForceChangeLevel(g_szMapName, szBuffer);
+	g_bInTransactionChain = false;
+	revertServerHibernateSettings();
+}
+public void checkError(Handle db)
+{
+	char error[256];
+	if(SQL_GetError(db, error, 256))
+	{
+		PrintToServer("[%s] ERROR: %s", g_szChatPrefix, error);
+	}
 }
 public void SQLTXNRankFail(Handle db, any data, int numQueries, const char[] error, int failIndex, any[] queryData)
 {
@@ -1414,8 +1464,9 @@ public void sql_selectRankedPlayerCallback(Handle owner, Handle hndl, const char
 		// Next up, challenge points
 		char szQuery[512];
 
-		Format(szQuery, 512, "SELECT steamid, bet FROM ck_challenges WHERE steamid = '%s' OR steamid2 ='%s'", szSteamId, szSteamId);
+		Format(szQuery, 512, "SELECT steamid, bet FROM ck_challenges WHERE steamid = '%s' UNION SELECT steamid, bet FROM ck_challenges WHERE steamid2 = '%s'", szSteamId, szSteamId);
 		SQL_TQuery(g_hDb, sql_selectChallengesCallbackCalc, szQuery, client, DBPrio_Low);
+		
 	}
 	else
 	{

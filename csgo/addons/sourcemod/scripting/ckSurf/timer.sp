@@ -531,16 +531,7 @@ public Action TerminateRoundTimer(Handle timer)
 
 public Action BotRestartTimer(Handle timer)
 {
-	int count = 0;
-	char szBuffer[64];
-	if (g_hInfoBot.BoolValue)
-		count++;
-	if (g_hBonusBot.BoolValue)
-		count++;
-	if (g_hReplayBot.BoolValue)
-		count++;
-	Format(szBuffer, sizeof(szBuffer), "bot_quota %i", count);
-	ServerCommand(szBuffer);
+	setBotQuota();
 	LoadReplays();
 	LoadInfoBot();
 	PrintToChatAll("[%c%s%c] Replay bots have been restarted.", MOSSGREEN, g_szChatPrefix, WHITE);
