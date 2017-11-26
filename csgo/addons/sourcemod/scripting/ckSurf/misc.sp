@@ -3475,8 +3475,14 @@ public void botFix()
 					KickClient(i);
 					g_bTrailOn[i] = false;
 				}
+				if (i == g_InfoBot)
+				{						
+						g_InfoBot = -1;
+						KickClient(i);
+				}
 			}
 		}
+	ServerCommand("Bot_Quota 0");
 	CreateTimer(1.0, BotRestartTimer);
 }
 void TransmitTriggers(bool transmit)
