@@ -375,7 +375,11 @@ public Action Admin_insertMapTier(int client, int args)
 {
 	if (!IsValidClient(client))
 		return Plugin_Handled;
-
+	if (!g_bServerDataLoaded)
+	{
+		PrintToChat(client, "[%c%s%c] The server is still being loaded. Please try to add a tier later.", MOSSGREEN, g_szChatPrefix, WHITE);
+		return Plugin_Handled;
+	}
 	if (args < 2)
 	{
 		ReplyToCommand(client, "[CK] Usage: sm_addmaptier <ZoneGroup> <Tier>");
@@ -410,7 +414,11 @@ public Action Admin_insertTier(int client, int args)
 {
 	if (!IsValidClient(client))
 		return Plugin_Handled;
-
+	if (!g_bServerDataLoaded)
+	{
+		PrintToChat(client, "[%c%s%c] The server is still being loaded. Please try to add a tier later.", MOSSGREEN, g_szChatPrefix, WHITE);
+		return Plugin_Handled;
+	}
 	if (args < 1)
 	{
 		ReplyToCommand(client, "[CK] Usage: sm_at <Tier>");

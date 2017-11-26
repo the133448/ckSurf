@@ -160,7 +160,7 @@ char sql_selectTieredMaps[] = "SELECT distinct z.mapname as 'mapname', IFNULL((S
 // Ranks TODO
 char sql_createRanks[] = "CREATE TABLE IF NOT EXISTS `ck_ranks` ( `points` int(7) NOT NULL, `num` int(7) DEFAULT NULL, PRIMARY KEY (`points`) ) ENGINE=MyISAM DEFAULT CHARSET=utf8";
 char sql_UpdateRanks[] = "insert into ck_ranks(points,num) select points,count(*) from ck_playerrank group by points;";
-char sql_createSPRanks[] = "DELIMITER $$ CREATE PROCEDURE updatePoints(      OldPoints INT      ,NewPoints INT  ) BEGIN     INSERT INTO ck_ranks (points,num) VALUES (NewScore,1)      ON DUPLICATE KEY      UPDATE num = num + 1;     UPDATE ck_ranks SET num = num - 1 WHERE points = OldScore;     DELETE FROM ck_ranks WHERE num = 0 AND points = OldScore; END$$ DELIMITER ;";
+char sql_createSPRanks[] = "DELIMITER // CREATE PROCEDURE `updatePoints` (OldScore INT, NewScore INT) BEGIN INSERT INTO ck_ranks (points,num) VALUES (NewScore,1) ON DUPLICATE KEY UPDATE num = num + 1; UPDATE ck_ranks SET num = num - 1 WHERE points = OldScore; DELETE FROM ck_ranks WHERE num = 0 AND points = OldScore; SELECT SUM(num) FROM ck_ranks WHERE points >= newscore; END// DELIMITER ;";
 
 
 
@@ -275,7 +275,6 @@ public void db_setupDatabase()
 
 void txn_add_ck_ranks()
 {
-	//TODO
 	PrintToServer("---------------------------------------------------------------------------");
 	disableServerHibernate();
 	PrintToServer("[%s] Started to make changes to database. Updating from 1.21.3 -> 1.21.4.", g_szChatPrefix);
@@ -285,12 +284,29 @@ void txn_add_ck_ranks()
 	Transaction h_ranks = SQL_CreateTransaction();
 	SQL_AddQuery(h_ranks, sql_createRanks);
 	SQL_AddQuery(h_ranks, sql_UpdateRanks);
-	SQL_AddQuery(h_ranks, sql_createSPRanks);
+	//SQL_AddQuery(h_ranks, sql_createSPRanks);
 	SQL_AddQuery(h_ranks, "CREATE INDEX `idx_ck_playerrank_points`  ON `ck_playerrank` (points);");
 	SQL_AddQuery(h_ranks, "CREATE INDEX `idx_ck_ranks_points`  ON `ck_ranks` (points);");
 	SQL_AddQuery(h_ranks, "CREATE INDEX `idx_ck_latestrecords_date`  ON `ck_latestrecords` (date);");
 	SQL_AddQuery(h_ranks, "ALTER TABLE `ck_playertemp` ADD COLUMN `datetime` DATETIME NOT NULL DEFAULT NOW() AFTER `zonegroup`;");
-	SQL_ExecuteTransaction(g_hDb, h_ranks, SQLTxn_Success, SQLTxn_TXNFailed, 7);
+	SQL_ExecuteTransaction(g_hDb, h_ranks, SQLTXNRankSucces, SQLTXNRankFail);
+}
+public void SQLTXNRankSucces(Handle db, any data, int numQueries, Handle[] results, any[] queryData)
+{
+	g_bInTransactionChain = false;
+	revertServerHibernateSettings();
+	PrintToServer("[%s] All changes succesfully done! Changing map!", g_szChatPrefix);
+	PrintToServer("---------------------------------------------------------------------------");
+	char szBuffer[256];
+	Format(szBuffer, sizeof(szBuffer), "[%s] Database Update Success! Changing map!", g_szChatPrefix);
+	ForceChangeLevel(g_szMapName, szBuffer);
+}
+public void SQLTXNRankFail(Handle db, any data, int numQueries, const char[] error, int failIndex, any[] queryData)
+{
+		revertServerHibernateSettings();
+		PrintToServer("[%s]: Couldn't make changes into the database. Transaction: %i, error: %s", g_szChatPrefix, data, error);
+		PrintToServer("---------------------------------------------------------------------------");
+		LogError("[%s]: Couldn't make changes into the database. Transaction: %i, error: %s", g_szChatPrefix, data, error);
 }
 
 
@@ -5429,7 +5445,8 @@ public void sql_selectLatestRecordsCallback(Handle owner, Handle hndl, const cha
 
 public void db_CheckLatestRecords()
 {
-	SQL_TQuery(g_hDb, sql_checkLatestRecordsCallback, sql_select30SecondRecords, DBPrio_Low);
+	if (g_bServerDataLoaded)
+		SQL_TQuery(g_hDb, sql_checkLatestRecordsCallback, sql_select30SecondRecords, DBPrio_Low);
 }
 
 public void sql_checkLatestRecordsCallback(Handle owner, Handle hndl, const char[] error, any data)

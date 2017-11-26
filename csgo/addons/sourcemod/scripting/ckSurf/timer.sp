@@ -154,17 +154,21 @@ public Action AttackTimer(Handle timer)
 }
 public Action tierTimer(Handle timer)
 {
-	for (int client = 1; client <= MaxClients; client++)
+	if (g_bServerDataLoaded)
 	{
-		if (IsValidClient(client) && (CheckCommandAccess(client, "sm_at", ADMFLAG_GENERIC, false)))
-		{	
-			if(!g_bTierFound[0] || (-1 < 0 < g_mapZoneGroupCount))
-			{
-				PrintToChat(client, "[%c%s%c] %cPlease give this map a tier. write %c!at <tiernumber>%c.", MOSSGREEN, g_szChatPrefix, WHITE, RED, YELLOW,RED);
+		for (int client = 1; client <= MaxClients; client++)
+		{
+			if (IsValidClient(client) && (CheckCommandAccess(client, "sm_at", ADMFLAG_GENERIC, false)))
+			{	
+				if(!g_bTierFound[0] || (-1 < 0 < g_mapZoneGroupCount))
+				{
+					PrintToChat(client, "[%c%s%c] %cPlease give this map a tier. write %c!at <tiernumber>%c.", MOSSGREEN, g_szChatPrefix, WHITE, RED, YELLOW,RED);
+				}
 			}
 		}
 	}
 	return Plugin_Continue;
+	
 }
 public Action CKTimer1(Handle timer)
 {
