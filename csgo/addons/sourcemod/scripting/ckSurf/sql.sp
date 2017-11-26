@@ -98,10 +98,10 @@ char sql_updatePlayerOptions[] = "UPDATE ck_playeroptions SET speedmeter ='%i', 
 //char sql_deleteSound[] = "DELETE FROM ck_sound WHERE soundID = '%i'";
 
 //TABLE PLAYERRANK
-char sql_createPlayerRank[] = "CREATE TABLE IF NOT EXISTS ck_playerrank (steamid VARCHAR(32), name VARCHAR(32), country VARCHAR(32), points INT(12) unsigned  DEFAULT '0', winratio INT(12)  DEFAULT '0', pointsratio INT(12)  DEFAULT '0',finishedmaps INT(12) DEFAULT '0', multiplier INT(12) unsigned DEFAULT '0', finishedmapspro INT(12) DEFAULT '0', lastseen DATE, PRIMARY KEY(steamid));";
+char sql_createPlayerRank[] = "CREATE TABLE IF NOT EXISTS ck_playerrank (steamid VARCHAR(32), name VARCHAR(32), country VARCHAR(32), points INT(12) unsigned  DEFAULT '0', winratio INT(12)  DEFAULT '0', pointsratio INT(12)  DEFAULT '0',finishedmaps INT(12) DEFAULT '0', multiplier INT(12) unsigned DEFAULT '0', finishedmapspro INT(12) DEFAULT '0', lastseen DATE, PRIMARY KEY(steamid));"; //
 char sql_insertPlayerRank[] = "INSERT INTO ck_playerrank (steamid, name, country) VALUES('%s', '%s', '%s');";
-char sql_updatePlayerRankPoints[] = "UPDATE ck_playerrank SET name ='%s', points ='%i', finishedmapspro='%i',winratio = '%i',pointsratio = '%i' where steamid='%s'";
-char sql_updatePlayerRankPoints2[] = "UPDATE ck_playerrank SET name ='%s', points ='%i', finishedmapspro='%i',winratio = '%i',pointsratio = '%i', country ='%s' where steamid='%s'";
+char sql_updatePlayerRankPoints[] = "UPDATE ck_playerrank SET name ='%s', points ='%i', finishedmapspro='%i',winratio = '%i',pointsratio = '%i' where steamid='%s'"; //
+char sql_updatePlayerRankPoints2[] = "UPDATE ck_playerrank SET name ='%s', points ='%i', finishedmapspro='%i',winratio = '%i',pointsratio = '%i', country ='%s' where steamid='%s'"; //
 char sql_updatePlayerRank[] = "UPDATE ck_playerrank SET finishedmaps ='%i', finishedmapspro='%i', multiplier ='%i'  where steamid='%s'";
 char sql_selectPlayerRankAll[] = "SELECT name, steamid FROM ck_playerrank where name like '%c%s%c'";
 char sql_selectPlayerRankAll2[] = "SELECT name, steamid FROM ck_playerrank where name = '%s'";
@@ -111,10 +111,10 @@ char sql_UpdateLastSeenSQLite[] = "UPDATE ck_playerrank SET lastseen = date('now
 char sql_selectTopPlayers[] = "SELECT name, points, finishedmapspro, steamid FROM ck_playerrank ORDER BY points DESC LIMIT 100";
 char sql_selectTopChallengers[] = "SELECT name, winratio, pointsratio, steamid FROM ck_playerrank ORDER BY pointsratio DESC LIMIT 5";
 char sql_selectRankedPlayer[] = "SELECT steamid, name, points, finishedmapspro, multiplier, country, lastseen from ck_playerrank where steamid='%s'";
-char sql_selectRankedPlayersRank[] = "SELECT name FROM ck_playerrank WHERE points >= (SELECT points FROM ck_playerrank WHERE steamid = '%s') ORDER BY points";
-char sql_selectRankedPlayers[] = "SELECT steamid, name from ck_playerrank where points > 0 ORDER BY points DESC";
-char sql_CountRankedPlayers[] = "SELECT COUNT(steamid) FROM ck_playerrank";
-char sql_CountRankedPlayers2[] = "SELECT COUNT(steamid) FROM ck_playerrank where points > 0";
+char sql_selectRankedPlayersRank[] = "SELECT SUM(num) FROM ck_ranks WHERE points >= (SELECT points FROM ck_playerrank WHERE steamid = '%s')";
+char sql_selectRankedPlayers[] = "SELECT steamid, name from ck_playerrank where points > 0 ORDER BY points DESC"; //This is fine there is no limit, as its the ADMIN recalc.
+char sql_CountRankedPlayers[] = "SELECT SUM(num) FROM ck_ranks";
+char sql_CountRankedPlayers2[] = "SELECT SUM(num) FROM ck_ranks WHERE points > 0;";
 
 //TABLE PLAYERTIMES
 char sql_createPlayertimes[] = "CREATE TABLE IF NOT EXISTS ck_playertimes (steamid VARCHAR(32), mapname VARCHAR(32), name VARCHAR(32), runtimepro FLOAT NOT NULL DEFAULT '-1.0', PRIMARY KEY(steamid,mapname));";
@@ -157,6 +157,12 @@ char sql_resetMapRecords[] = "DELETE FROM ck_playertimes WHERE mapname = '%s'";
 
 char sql_selectTieredMaps[] = "SELECT distinct z.mapname as 'mapname', IFNULL((SELECT COUNT(mapname) FROM ck_playertimes WHERE mapname = z.mapname), 0) as 'maptimes', mt.tier FROM ck_playertimes t LEFT JOIN ck_zones z ON t.mapname = z.mapname  LEFT JOIN ck_maptier mt ON mt.mapname = z.mapname %s GROUP BY z.mapname ORDER BY maptimes DESC";
  
+// Ranks TODO
+char sql_createRanks[] = "CREATE TABLE IF NOT EXISTS `ck_ranks` ( `points` int(7) NOT NULL, `num` int(7) DEFAULT NULL, PRIMARY KEY (`points`) ) ENGINE=MyISAM DEFAULT CHARSET=utf8";
+char sql_UpdateRanks[] = "insert into ck_ranks(points,num) select points,count(*) from ck_playerrank group by points;";
+char sql_createSPRanks[] = "DELIMITER $$ CREATE PROCEDURE updatePoints(      OldPoints INT      ,NewPoints INT  ) BEGIN     INSERT INTO ck_ranks (points,num) VALUES (NewScore,1)      ON DUPLICATE KEY      UPDATE num = num + 1;     UPDATE ck_ranks SET num = num - 1 WHERE points = OldScore;     DELETE FROM ck_ranks WHERE num = 0 AND points = OldScore; END$$ DELIMITER ;";
+
+
 
 
 ////////////////////////
@@ -249,14 +255,8 @@ public void db_setupDatabase()
   	/////////////////////////////// 
   	SQL_FastQuery(g_hDb, sql_newPlayerOptions);  
   	SQL_FastQuery(g_hDb, "ALTER TABLE `ck_latestrecords` ADD `servername` VARCHAR(128);");
-  	//if (!SQL_FastQuery(g_hDb, "SELECT soundId FROM ck_sound LIMIT 1"))
-  	//{
-  		//PrintToServer("---------------------------------------------------------------------------");
-  		//PrintToServer("[%s] ADDING IN CUSTOM SOUNDS TO DATABSE", g_szChatPrefix);
-  		//SQL_FastQuery(g_hDb, sql_createSound);
-  		//PrintToServer("---------------------------------------------------------------------------");
-		  	
-  	//}
+	
+	
   		  	
   	
 	SQL_UnlockDatabase(g_hDb);
@@ -265,14 +265,39 @@ public void db_setupDatabase()
 	for (int i = 0; i < sizeof(g_failedTransactions); i++)
 		g_failedTransactions[i] = 0;
 
-	txn_addExtraCheckpoints();
+	//txn_addExtraCheckpoints();
+	if (!SQL_FastQuery(g_hDb, "SELECT points FROM ck_ranks LIMIT 1;"))
+	{
+		txn_add_ck_ranks();
+	}
 	return;
 }
+
+void txn_add_ck_ranks()
+{
+	//TODO
+	PrintToServer("---------------------------------------------------------------------------");
+	disableServerHibernate();
+	PrintToServer("[%s] Started to make changes to database. Updating from 1.21.3 -> 1.21.4.", g_szChatPrefix);
+	PrintToServer("[%s] WARNING: DO NOT CONNECT TO THE SERVER, OR CHANGE MAP!", g_szChatPrefix);
+	
+	g_bInTransactionChain = true;
+	Transaction h_ranks = SQL_CreateTransaction();
+	SQL_AddQuery(h_ranks, sql_createRanks);
+	SQL_AddQuery(h_ranks, sql_UpdateRanks);
+	SQL_AddQuery(h_ranks, sql_createSPRanks);
+	SQL_AddQuery(h_ranks, "CREATE INDEX `idx_ck_playerrank_points`  ON `ck_playerrank` (points);");
+	SQL_AddQuery(h_ranks, "CREATE INDEX `idx_ck_ranks_points`  ON `ck_ranks` (points);");
+	SQL_AddQuery(h_ranks, "CREATE INDEX `idx_ck_latestrecords_date`  ON `ck_latestrecords` (date);");
+	SQL_AddQuery(h_ranks, "ALTER TABLE `ck_playertemp` ADD COLUMN `datetime` DATETIME NOT NULL DEFAULT NOW() AFTER `zonegroup`;");
+	SQL_ExecuteTransaction(g_hDb, h_ranks, SQLTxn_Success, SQLTxn_TXNFailed, 7);
+}
+
 
 void txn_addExtraCheckpoints()
 {
 	// Add extra checkpoints to Checkpoints and add new primary key:
-	if (!SQL_FastQuery(g_hDb, "SELECT cp35 FROM ck_checkpoints;"))
+	if (!SQL_FastQuery(g_hDb, "SELECT cp35 FROM ck_checkpoints LIMIT 1;"))
 	{
 		PrintToServer("---------------------------------------------------------------------------");
 		disableServerHibernate();
@@ -424,6 +449,14 @@ public void SQLTxn_Success(Handle db, any data, int numQueries, Handle[] results
 			Format(szBuffer, sizeof(szBuffer), "[%s] All changes succesfully done! Changing map!", g_szChatPrefix);
 			ForceChangeLevel(g_szMapName, szBuffer);
 		}
+		case 7: {
+			g_bInTransactionChain = false;
+			revertServerHibernateSettings();
+			PrintToServer("[%s] All changes succesfully done! Changing map!", g_szChatPrefix);
+			char szBuffer[256];
+			Format(szBuffer, sizeof(szBuffer), "[%s] Database Update Success! Changing map!", g_szChatPrefix);
+			ForceChangeLevel(g_szMapName, szBuffer);
+		}
 	}
 }
 
@@ -456,6 +489,9 @@ public void SQLTxn_TXNFailed(Handle db, any data, int numQueries, const char[] e
 			case 6: {
 				PrintToServer("[%s] Error in making changes to zones! Retrying... (%s)", g_szChatPrefix, error);
 				txn_changesToZones();
+			}
+			case 7: {
+				PrintToServer("[%s] Error in updating, restart server/change map to retry.", g_szChatPrefix, error);
 			}
 		}
 	}
@@ -1383,8 +1419,10 @@ public void sql_selectRankedPlayerCallback(Handle owner, Handle hndl, const char
 
 			//"INSERT INTO ck_playerrank (steamid, name, country) VALUES('%s', '%s', '%s');";
 			// No need to continue calculating, as the doesn't have any records.
+			
 			Format(szQuery, 255, sql_insertPlayerRank, szSteamId, szName, g_szCountry[client]);
 			SQL_TQuery(g_hDb, SQL_InsertPlayerCallBack, szQuery, client, DBPrio_Low);
+			
 
 			g_pr_multiplier[client] = 0;
 			g_pr_finishedmaps[client] = 0;
@@ -1578,7 +1616,9 @@ public void sql_updatePlayerRankPointsCallback(Handle owner, Handle hndl, const 
 		LogError("[%s] SQL Error (sql_updatePlayerRankPointsCallback): %s", g_szChatPrefix, error);
 		return;
 	}
-
+	char szQuery[128];
+	Format(szQuery, 128, "CALL updatePoints(%i, %i);", g_pr_oldpoints[data], g_pr_points[data]);
+	SQL_FastQuery(g_hDb, szQuery);
 	// If was recalculating points, go to the next player, announce or end calculating
 	if (data > MAXPLAYERS && g_pr_RankingRecalc_InProgress || data > MAXPLAYERS && g_bProfileRecalc[data])
 	{
@@ -1636,6 +1676,7 @@ public void sql_updatePlayerRankPointsCallback(Handle owner, Handle hndl, const 
 			char szName[MAX_NAME_LENGTH];
 			GetClientName(data, szName, MAX_NAME_LENGTH);
 			int earnedPoints = g_pr_points[data] - g_pr_oldpoints[data];
+			
 			if (earnedPoints > 0) // if player earned points -> Announce
 			{
 				for (int i = 1; i <= MaxClients; i++)
@@ -1741,7 +1782,7 @@ public void sql_selectRankedPlayersRankCallback(Handle owner, Handle hndl, const
 
 	if (SQL_HasResultSet(hndl) && SQL_FetchRow(hndl))
 	{
-		g_PlayerRank[client] = SQL_GetRowCount(hndl);
+		g_PlayerRank[client] = SQL_FetchInt(hndl, 0);
 		// Sort players by rank in scoreboard
 		if (g_pr_AllPlayers < g_PlayerRank[client])
 			CS_SetClientContributionScore(client, -9999);
@@ -1867,8 +1908,7 @@ public void SQL_ViewRankedPlayerCallback2(Handle owner, Handle hndl, const char[
 		char szQuery[512];
 		char szSteamId[32];
 		char szName[MAX_NAME_LENGTH];
-		int rank = SQL_GetRowCount(hndl);
-
+		int rank = SQL_FetchInt(hndl,0);
 		WritePackCell(data, rank);
 		ResetPack(data);
 		ReadPackString(data, szName, MAX_NAME_LENGTH);
@@ -5409,7 +5449,7 @@ public void sql_checkLatestRecordsCallback(Handle owner, Handle hndl, const char
 	
 	if (SQL_HasResultSet(hndl) && (SQL_GetRowCount(hndl) != 0))
 	{
-		//TODO Log bonus records!
+		// Log bonus records!
 		while (SQL_FetchRow(hndl))
 		{	
 			SQL_FetchString(hndl, 0, szName, 64);
@@ -5715,7 +5755,7 @@ public void sql_CountRankedPlayers2Callback(Handle owner, Handle hndl, const cha
 
 public void db_ClearLatestRecords()
 {
-	debug_msg(" Started xxxxxx ");
+	debug_msg(" Started clearing latest records ");
 	if (g_DbType == MYSQL)
 		SQL_TQuery(g_hDb, SQL_CheckCallback, "DELETE FROM ck_latestrecords WHERE date < NOW() - INTERVAL 1 WEEK", DBPrio_Low);
 	else
@@ -6030,11 +6070,12 @@ public void db_Cleanup()
 	char szQuery[255];
 
 	//tmps
-	Format(szQuery, 255, "DELETE FROM ck_playertemp where mapname != '%s'", g_szMapName);
+	Format(szQuery, 255, "DELETE FROM ck_playertemp WHERE datetime < NOW() - INTERVAL 3 DAY");
 	SQL_TQuery(g_hDb, SQL_CheckCallback, szQuery);
 
-	//times
-	SQL_TQuery(g_hDb, SQL_CheckCallback, "DELETE FROM ck_playertimes where runtimepro = -1.0");
+	//times, cleanup can take 0.1 seconds on a db with 150k playertimes. We dont want to do this everytime.
+	if(GetRandomInt(1,100) == 10)
+		SQL_TQuery(g_hDb, SQL_CheckCallback, "DELETE FROM ck_playertimes where runtimepro = -1.0");
 }
 
 public void db_resetMapRecords(int client, char szMapName[128])
@@ -6064,7 +6105,8 @@ public void SQL_InsertPlayerCallBack(Handle owner, Handle hndl, const char[] err
 		LogError("[%s] SQL Error (SQL_InsertPlayerCallBack): %s", g_szChatPrefix, error);
 		return;
 	}
-
+	SQL_TQuery(g_hDb, SQL_CheckCallback, "INSERT INTO ck_ranks (points,num) VALUES (0,1) ON DUPLICATE KEY UPDATE num = num + 1;", DBPrio_Low);
+	
 	if (IsClientInGame(data))
 		db_UpdateLastSeen(data);
 }
