@@ -1,0 +1,8 @@
+Plugin(source='addons/sourcemod/scripting/ckSurf.sp')
+
+Package(name='ckSurf',
+        plugins=['ckSurf'],
+        filegroups={
+            '.': ['README.md'],
+        },
+)
