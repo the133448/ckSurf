@@ -1,4 +1,4 @@
-Plugin(source='addons/sourcemod/scripting/ckSurf.sp')
+Plugin(source='csgo/addons/sourcemod/scripting/ckSurf.sp')
 
 Package(name='ckSurf',
         plugins=['ckSurf'],
