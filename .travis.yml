@@ -1,39 +1,33 @@
+# i have no idea AT ALL on how to use travis,
+# stolen from splewis: https://raw.githubusercontent.com/splewis/csgo-pug-setup/master/.travis.yml
+# i'll fail anyways, right? :(
 sudo: false
 
 addons:
     apt_packages:
-        - lib32stdc++6
+        - lib32stdc++6  # needed for spcomp
 
-env: 
-  global:
-    - INCLUDE=csgo/addons/sourcemod/scripting/include/
-    - SCRIPTING=csgo/addons/sourcemod/scripting/
-    - PLUGINS=csgo/addons/sourcemod/plugins/
-  matrix:
-    - SOURCEMOD=1.7.1
-    - SOURCEMOD=1.7.2
-
-before_install:
-  - mkdir build-env
-
-install:
-  - cd build-env
-  - wget http://sourcemod.gameconnect.net/files/sourcemod-$SOURCEMOD-linux.tar.gz
-  - tar -xzvf sourcemod-$SOURCEMOD-linux.tar.gz
-  - cd ../
-  - find build-env/addons/sourcemod/scripting/ -name "*.sp" -type f -delete
-  - cp -rv $SCRIPTING/. build-env/addons/sourcemod/scripting/
-  - cp -rv $INCLUDE/. build-env/addons/sourcemod/scripting/include/
+env:
+    - SMVERSION=1.8
 
 before_script:
-  - chmod +rx build-env/addons/sourcemod/scripting/spcomp
-  - chmod +rx build-env/addons/sourcemod/scripting/compile.sh
-  - cd build-env/addons/sourcemod/scripting/
-  
+    # install smbuilder
+    - git clone https://github.com/splewis/sm-builder
+    - cd sm-builder
+    - pip install --user -r requirements.txt
+    - python setup.py install --prefix=~/.local
+    - cd ..
+
+    # install the sourcemod compiler
+    - SMPACKAGE="http://sourcemod.net/latest.php?os=linux&version=${SMVERSION}"
+    - wget $SMPACKAGE
+    - tar xfz $(basename $SMPACKAGE)
+    - cd csgo/addons/sourcemod/scripting/
+    - chmod +x spcomp
+    - PATH+=":$PWD"
+
+    # - cp ../../../scripting/include/* include/ # i don't think this is necessary anymore
+    - cd ../../..
+
 script:
-  - ./compile.sh
-  
-after_success:
-  - cd ../../../..
-  - cp -rv build-env/addons/sourcemod/scripting/compiled/. $PLUGINS
-  - cd $PLUGINS
+    - smbuilder --flags="-E"
