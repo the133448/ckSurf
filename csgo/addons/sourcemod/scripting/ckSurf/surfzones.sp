@@ -172,8 +172,11 @@ public void StartTouch(int client, int action[3])
 		}
 		else if (action[0] == 2) // End Zone
 		{
-			if (g_iClientInZone[client][2] == action[2]) //  Cant end bonus timer in this zone && in the having the same timer on
-			{
+			if (g_iClientInZone[client][2] == action[2])
+			{ //  Cant end bonus timer in this zone && in the having the same timer on
+				if (g_bStageTimerRunning[client] && !g_bPracticeMode[client])
+					EndStageTimer(client);
+
 				CL_OnEndTimerPress(client);
 			}
 			else
@@ -190,7 +193,8 @@ public void StartTouch(int client, int action[3])
 			// Resetting checkpoints
 			lastCheckpoint[g_iClientInZone[client][2]][client] = 999;
 		}
-		else if (action[0] == 3) // Stage Zone
+		
+		/*else if (action[0] == 3) // Stage Zone
 		{
 			if (g_bPracticeMode[client]) // If practice mode is on
 			{
@@ -200,11 +204,11 @@ public void StartTouch(int client, int action[3])
 					//This tempfix probably introduces the exploit that allows huge start speeds
 					Command_normalMode(client, 1); // Temp fix. Need to track stages checkpoints were made in.
 				}
-				/* Allows for practising Telehops.
+				 Allows for practising Telehops.
 				else 
 				{
 					Command_goToPlayerCheckpoint(client, 1);
-				}*/
+				}
 			}
 			else
 			{  // Setting valid to false, in case of checkers
@@ -218,6 +222,46 @@ public void StartTouch(int client, int action[3])
 					lastCheckpoint[g_iClientInZone[client][2]][client] = action[1];
 				}
 			}
+		}*/
+		else if (action[0] == 3) // Stage Zone
+		{
+			if (g_bPracticeMode[client]) // If practice mode is on
+			{
+				if (action[1] > lastCheckpoint[g_iClientInZone[client][2]][client] && g_iClientInZone[client][2] == action[2] || lastCheckpoint[g_iClientInZone[client][2]][client] == 999)
+				{
+					Command_normalMode(client, 1); // Temp fix. Need to track stages checkpoints were made in.
+				}
+				else
+					Command_goToPlayerCheckpoint(client, 1);
+			}
+			else
+			{  // Setting valid to false, in case of checkers
+				g_bValidRun[client] = false;
+
+				// Announcing checkpoint
+				if (action[1] != lastCheckpoint[g_iClientInZone[client][2]][client] && g_iClientInZone[client][2] == action[2])
+				{
+					if (g_bStageTimerRunning[client] && g_iClientInZone[client][2] == 0 && g_Stage[0][client] == action[1] + 1)
+					{
+						EndStageTimer(client);
+					}
+
+
+					g_Stage[g_iClientInZone[client][2]][client] = (action[1] + 2);
+					Checkpoint(client, action[1], g_iClientInZone[client][2]);
+					lastCheckpoint[g_iClientInZone[client][2]][client] = action[1];
+				}
+				else
+				{
+					g_bStageTimerRunning[client] = false;
+				}
+
+				//Stage_StartRecording(client);
+			}
+
+			// Repeat stage
+			if (g_RepeatStage[client] != -1 && g_Stage[0][client] == action[1] + 2)
+				teleportClient(client, 0, g_RepeatStage[client], true);
 		}
 		else if (action[0] == 4) // Checkpoint Zone
 		{
@@ -281,9 +325,47 @@ public void EndTouch(int client, int action[3])
 					else
 					{
 						CL_OnStartTimerPress(client);
+						// Make sure the player is not in a bonus
+						if (g_iClientInZone[client][2] == 0)
+							StartStageTimer(client);
 					}
 					g_bValidRun[client] = false;
 				}
+			}
+		}
+		else if (action[0] == 3)
+		{
+			/*// Get lowest cornor of the zone
+			float vLowestCorner[3];
+			if (g_mapZones[action[3]][PointA][2] > g_mapZones[action[3]][PointB][2])
+				Array_Copy(g_mapZones[action[3]][PointB], vLowestCorner, 3);
+			else
+				Array_Copy(g_mapZones[action[3]][PointA], vLowestCorner, 3);
+
+			// Check if the player jumped from an high platform
+			if (g_vLastGroundTouch[client][2] > (vLowestCorner[2] + 25.0) &&  !g_bStageAllowHighJumps[g_Stage[0][client]]) 
+				PrintToChat(client, "[%cSurf Timer%c] %cYou jumped from way too high.", MOSSGREEN, WHITE, LIGHTRED); 
+			*/
+			if (g_iClientInZone[client][2] == 0)
+			{
+					// NoClip check
+					if (g_bNoClip[client])
+					{
+						PrintToChat(client, "[%c%s%c] You are noclipping, timer disabled.", MOSSGREEN, g_szChatPrefix, WHITE);
+						ClientCommand(client, "play buttons\\button10.wav");
+					}
+					if ((!g_bNoClip[client]) && g_bNoclipWithoutR[client])
+					{
+						ClientCommand(client, "play buttons\\button10.wav");
+						PrintToChat(client, "[%c%s%c] You have noclipped and have not restarted, please type !r to begin your run.", MOSSGREEN, g_szChatPrefix, WHITE);
+					}
+					else if((GetGameTime() - g_fLastTimePracUsed[client]) < 3.0) //practice mode check
+					{
+						PrintToChat(client, "[%c%s%c] You have been using practice in the past few seconds, timer disabled.", MOSSGREEN, g_szChatPrefix, WHITE);
+						ClientCommand(client, "play buttons\\button10.wav");
+					}
+					else
+						StartStageTimer(client);
 			}
 		}
 

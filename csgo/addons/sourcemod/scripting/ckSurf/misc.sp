@@ -1439,7 +1439,17 @@ public void SetClientDefaults(int client)
 		g_bflagTitles[client][i] = false;
 		g_bflagTitles_orig[client][i] = false;
 	}
+	
+	g_fStageStartTime[client] = 0.0;
+	g_bStageTimerRunning[client] = false;
+	g_RepeatStage[client] = -1;
 
+	for (int i = 0; i < CPLIMIT; i++) {
+		g_fStagePlayerRecord[client][i] = 9999999.0;
+		g_StagePlayerRank[client][i] = 9999999;
+		g_fPlayerCurrentStartSpeed[client][i] = -1.0;
+		g_fPlayerStageRecStartSpeed[client][i] = -1.0;
+	}
 	g_fLastPlayerCheckpoint[client] = GameTime;
 	g_bCreatedTeleport[client] = false;
 	g_bPracticeMode[client] = false;

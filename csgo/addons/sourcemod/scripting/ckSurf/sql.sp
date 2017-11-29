@@ -162,7 +162,13 @@ char sql_createRanks[] = "CREATE TABLE IF NOT EXISTS `ck_ranks` ( `points` int(7
 char sql_UpdateRanks[] = "insert into ck_ranks(points,num) select points,count(*) from ck_playerrank group by points;";
 //char sql_createSPRanks[] = "CREATE PROCEDURE updatePoints() (OldScore INT, NewScore INT) BEGIN INSERT INTO ck_ranks (points,num) VALUES (NewScore,1) ON DUPLICATE KEY UPDATE num = num + 1; UPDATE ck_ranks SET num = num - 1 WHERE points = OldScore; DELETE FROM ck_ranks WHERE num = 0 AND points = OldScore; SELECT SUM(num) FROM ck_ranks WHERE points >= newscore; END$$";
 
-
+// WRCP Records From: https://github.com/marcowmadeira/ckSurf/blob/master/csgo/addons/sourcemod/scripting/ckSurf/sql.sp#L146
+char sql_createStageRecordsTable[] = "CREATE TABLE IF NOT EXISTS `ck_stages` (`id` int(11) NOT NULL AUTO_INCREMENT, `steamid` varchar(45) NOT NULL, `map` varchar(45) NOT NULL, `stage` int(11) NOT NULL, `runtime` float NOT NULL, `date` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP, `startspeed` float NOT NULL DEFAULT -1, PRIMARY KEY (`id`), UNIQUE KEY `id_UNIQUE` (`id`)) AUTO_INCREMENT=1;";
+char sql_selectStageRecords[] = "SELECT stage, runtime, name, (SELECT COUNT(runtime) FROM ck_stages c WHERE c.map = '%s' AND c.stage = '%d') as completions, startspeed FROM ck_stages a JOIN ck_playerrank p ON a.steamid = p.steamid WHERE map = '%s' AND stage = '%d' ORDER BY runtime ASC LIMIT 1;";
+char sql_selectStagePlayerRecords[] = "SELECT stage as stg, runtime as rt, map as mp, (SELECT COUNT(*) FROM ck_stages a WHERE a.map = mp AND a.stage = stg AND runtime <= rt) as rank, startspeed FROM ck_stages WHERE map = '%s' AND steamid = '%s'";
+char sql_insertStageRecord[] = "INSERT INTO ck_stages (steamid, map, stage, runtime, startspeed) VALUES ('%s', '%s', '%d', '%f', '%f')";
+char sql_updateStageRecord[] = "UPDATE ck_stages SET runtime = '%f', date = CURRENT_TIMESTAMP, startspeed = '%f' WHERE map = '%s' AND steamid = '%s' AND stage = '%d'";
+char sql_viewStageTop[] = "SELECT name, runtime, s.steamid FROM ck_stages s JOIN ck_playerrank p ON p.steamid = s.steamid WHERE stage = '%d' AND map = '%s' ORDER BY runtime ASC LIMIT 50";
 
 
 ////////////////////////
@@ -269,12 +275,22 @@ public void db_setupDatabase()
 	{
 		txn_add_ck_ranks();
 	}
+	if (!SQL_FastQuery(g_hDb, "SELECT id FROM ck_stages LIMIT 1;"))
+	{
+		add_ck_stages();
+	}
 	return;
 }
 
 ////////////////////////////
 //// Updated Structure /////
 ////////////////////////////
+
+void add_ck_stages()
+{
+	SQL_FastQuery(g_hDb, sql_createStageRecordsTable);
+}
+
 
 void txn_add_ck_ranks()
 {
@@ -298,8 +314,7 @@ void txn_add_ck_ranks()
 		  "DELETE "...
 		  "FROM ck_ranks WHERE num = 0 "...
 		  "AND points = OldScore; "...
-		  "SELECT SUM(num) "...
-		  "FROM ck_ranks WHERE points >= newscore; END;;");
+		  "END;;");
 	
 	
 	if(!SQL_FastQuery(g_hDb, sQuery))
@@ -1271,6 +1286,7 @@ public void db_editSpawnLocationsCallback(Handle owner, Handle hndl, const char[
 public void db_selectSpawnLocations()
 {
 	debug_msg("Started db_selectSpawnLocations");
+	//TODO
 	for (int i = 0; i < MAXZONEGROUPS; i++)
 		g_bGotSpawnLocation[i] = false;
 
@@ -1428,7 +1444,12 @@ public void RecalcPlayerRank(int client, char steamid[128])
 //
 public void CalculatePlayerRank(int client)
 {
+	if (client <= MAXPLAYERS) {
+		if (g_CalculatingPoints[client])
+			return;
 
+		g_CalculatingPoints[client] = true;
+	}
 	char szQuery[255];
 	char szSteamId[32];
 	// Take old points into memory, so at the end you can show how much the points changed
@@ -1471,18 +1492,30 @@ public void sql_selectRankedPlayerCallback(Handle owner, Handle hndl, const char
 		// Multiplier = The amount of times a player has improved on his time
 		g_pr_multiplier[client] = SQL_FetchInt(hndl, 0);
 		if (g_pr_multiplier[client] < 0)
-			g_pr_multiplier[client] *= -1;
+			g_pr_multiplier[client] = g_pr_multiplier[client] * -1;
 		/**
 		* The following printtoconsole are for debugging! remove them when done
 		*/
-		if (IsValidClient(client))	
-			PrintToConsole(client, "-----\nBefore calculation:\ng_pr_multiplier: %d\ng_pr_points: %d\n------", g_pr_multiplier[client],g_pr_points[client]);
-
+		bool send = false;
+		if(g_hDebugMode.BoolValue)
+			send = true;
+		#if defined DEV_BUILD 
+		send = true;
+		#endif
+		if(send)
+		{
+			if (IsValidClient(client))	
+				PrintToConsole(client, "-----\nBefore calculation:\ng_pr_multiplier: %d\ng_pr_points: %d\n------", g_pr_multiplier[client],g_pr_points[client]);
+		}
 		// Multiplier increases players points by the set amount in ck_ranking_extra_points_improvements
 		g_pr_points[client] += GetConVarInt(g_hExtraPoints) * g_pr_multiplier[client];
-
-		if (IsValidClient(client))
-			PrintToConsole(client, "-----\nafter calculation:\ng_hExtraPoints: %d\ng_pr_points: %d\n------", GetConVarInt(g_hExtraPoints),g_pr_points[client]);
+		if(send)
+		{
+			if (IsValidClient(client))
+				PrintToConsole(client, "-----\nafter calculation:\ng_hExtraPoints: %d\ng_pr_points: %d\n------", GetConVarInt(g_hExtraPoints),g_pr_points[client]);
+		}
+		if(IsValidClient(client))
+			g_pr_Calculating[client] = true;
 		// Next up, challenge points
 		char szQuery[512];
 
@@ -1506,14 +1539,13 @@ public void sql_selectRankedPlayerCallback(Handle owner, Handle hndl, const char
 
 			GetClientName(client, szUName, MAX_NAME_LENGTH);
 			SQL_EscapeString(g_hDb, szUName, szName, MAX_NAME_LENGTH * 2 + 1);
-
+			//TODO
 			//"INSERT INTO ck_playerrank (steamid, name, country) VALUES('%s', '%s', '%s');";
 			// No need to continue calculating, as the doesn't have any records.
 			
 			Format(szQuery, 255, sql_insertPlayerRank, szSteamId, szName, g_szCountry[client]);
 			SQL_TQuery(g_hDb, SQL_InsertPlayerCallBack, szQuery, client, DBPrio_Low);
 			debug_msg(szQuery);
-			
 
 			g_pr_multiplier[client] = 0;
 			g_pr_finishedmaps[client] = 0;
@@ -1632,9 +1664,10 @@ public void sql_CountFinishedMapsCallback(Handle owner, Handle hndl, const char[
 		return;
 	}
 
-	char szMap[128], szMapName2[128];
+	char szMap[128], szMapName2[128], szSteamId[32];
 	int finishedMaps = 0, totalplayers, rank;
-
+	getSteamIDFromClient(client, szSteamId, 32);
+	
 	if (SQL_HasResultSet(hndl))
 	{
 		while (SQL_FetchRow(hndl))
@@ -1667,13 +1700,59 @@ public void sql_CountFinishedMapsCallback(Handle owner, Handle hndl, const char[
 	// Points gained from finishing maps for the first time
 	g_pr_points[client] += (finishedMaps * GetConVarInt(g_hExtraPoints2));
 
+	// Next up, calculate stage points:
+	char szQuery[512];
+	Format(szQuery, 512, "SELECT map, (SELECT count(1)+1 FROM ck_stages b WHERE a.map=b.map AND a.runtime > b.runtime AND a.stage = b.stage) AS rank, (SELECT count(1) FROM ck_stages b WHERE a.map = b.map AND a.stage = b.stage) as total FROM ck_stages a WHERE steamid = '%s';", szSteamId);
+	SQL_TQuery(g_hDb, sql_CountFinishedStagesCallback, szQuery, client, DBPrio_Low);
+	debug_msg(szQuery);
+}
+//
+// 6. Getting points from stage records
+//    Fetching
+//	  Mapname, total, rank	
+public void sql_CountFinishedStagesCallback(Handle owner, Handle hndl, const char[] error, any client)
+{
+	if (hndl == null)
+	{
+		LogError("[%s] SQL Error (sql_CountFinishedStagesCallback): %s", g_szChatPrefix, error);
+		return;
+	}
+
+
+	char szMap[128], szSteamId[32], szMapName2[128];
+	int totalplayers, rank;
+
+	getSteamIDFromClient(client, szSteamId, 32);
+
+	if (SQL_HasResultSet(hndl))
+	{
+		while (SQL_FetchRow(hndl))
+		{
+			// Total amount of players who have finished the stage
+			totalplayers = SQL_FetchInt(hndl, 2);
+			rank = SQL_FetchInt(hndl, 1);
+			SQL_FetchString(hndl, 0, szMap, 128);
+			for (int i = 0; i < GetArraySize(g_MapList); i++) // Check that the map is in the mapcycle
+			{
+				GetArrayString(g_MapList, i, szMapName2, sizeof(szMapName2));
+				if (StrEqual(szMapName2, szMap, false))
+				{
+					float percentage = 1.0 + ((1.0 / float(totalplayers)) - (float(rank) / float(totalplayers)));
+					g_pr_points[client] += RoundToCeil(20.0 * percentage);
+					g_pr_points[client] += RoundToCeil(50.0/float(rank));
+					break;
+				}
+			}
+		}
+	}
+
 	// Done checking, update points
 	db_updatePoints(client);
-
 }
 
+
 //
-// 6. Updating points to database
+// 7. Updating points to database
 //
 public void db_updatePoints(int client)
 {
@@ -1713,9 +1792,12 @@ public void sql_updatePlayerRankPointsCallback(Handle owner, Handle hndl, const 
 		return;
 	}
 	char szQuery[128];
-	Format(szQuery, 128, "CALL updatePoints(%i, %i);", g_pr_oldpoints[data], g_pr_points[data]);
-	debug_msg(szQuery);
-	SQL_FastQuery(g_hDb, szQuery);
+	if (g_pr_oldpoints[data] != g_pr_points[data])
+	{
+		Format(szQuery, 128, "CALL updatePoints(%i, %i);", g_pr_oldpoints[data], g_pr_points[data]);
+		debug_msg(szQuery);
+		SQL_FastQuery(g_hDb, szQuery);
+	}
 	// If was recalculating points, go to the next player, announce or end calculating
 	if (data > MAXPLAYERS && g_pr_RankingRecalc_InProgress || data > MAXPLAYERS && g_bProfileRecalc[data])
 	{
@@ -1744,7 +1826,7 @@ public void sql_updatePlayerRankPointsCallback(Handle owner, Handle hndl, const 
 			else
 			{
 				for (int i = 1; i <= MaxClients; i++)
-					if (1 <= i <= MaxClients && IsValidClient(i))
+					if (1 <= i <= MaxClients && IsValidEntity(i) && IsValidClient(i))
 					{
 						if (g_bManualRecalc)
 							PrintToChat(i, "%t", "PrUpdateFinished", MOSSGREEN, g_szChatPrefix, WHITE, LIMEGREEN);
@@ -1785,12 +1867,13 @@ public void sql_updatePlayerRankPointsCallback(Handle owner, Handle hndl, const 
 		}
 		g_pr_Calculating[data] = false;
 		db_GetPlayerRank(data);
+		g_CalculatingPoints[data] = false;
 		RequestFrame(SetClanTag, GetClientSerial(data));
 	}
 }
 
 //
-// Called when player joins server
+// Called when player joins server`
 //
 public void db_viewPlayerPoints(int client)
 {
@@ -1848,9 +1931,9 @@ public void db_viewPlayerPointsCallback(Handle owner, Handle hndl, const char[] 
 			SQL_EscapeString(g_hDb, szUName, szName, MAX_NAME_LENGTH * 2 + 1);
 
 			Format(szQuery, 512, sql_insertPlayerRank, g_szSteamID[client], szName, g_szCountry[client]);
-			SQL_TQuery(g_hDb, SQL_CheckCallback, szQuery, DBPrio_Low);
+			SQL_TQuery(g_hDb, SQL_InsertPlayerCallBack, szQuery, DBPrio_Low);
 			debug_msg(szQuery);
-			db_GetPlayerRank(client); // Count players rank
+			//db_GetPlayerRank(client); // Count players rank
 		}
 	}
 }
@@ -4070,37 +4153,9 @@ public void SQL_selectCheckpointsCallback(Handle owner, Handle hndl, const char[
 			}
 		}
 	}
-
 	if (!g_bSettingsLoaded[client])
-	{
-		g_bSettingsLoaded[client] = true;
-		g_bLoadingSettings[client] = false;
-		if (GetConVarBool(g_hTeleToStartWhenSettingsLoaded))
-		{
-			Command_Restart(client, 1);	
-			PrintToChat(client, "[%c%s%c] Your settings have been loaded. You may now begin your run.", MOSSGREEN, g_szChatPrefix, WHITE);
-
-			ClientCommand(client, "play buttons\\weapon_confirm.wav");
-			
-		}
-		char buffer[412];
-		Format(buffer, 412, "Finished Loading: %N on map: %s", client, g_szMapName);
-		debug_msg(buffer);	
-		// Seach for next client to load
-		for (int i = 1; i < MAXPLAYERS + 1; i++)
-		{
-			if (IsValidClient(i) && !IsFakeClient(i) && !g_bSettingsLoaded[i] && !g_bLoadingSettings[i])
-			{
-				Format(buffer, 412, "Started Loading: %N on map: %s", i, g_szMapName);
-				debug_msg(buffer);	
-				char szSteamID[32];
-				GetClientAuthId(i, AuthId_Steam2, szSteamID, 32, true);
-				db_viewPersonalRecords(i, szSteamID, g_szMapName);
-				g_bLoadingSettings[i] = true;
-				break;
-			}
-		}
-	}		
+		db_loadStagePlayerRecords(client);
+	
 }
 
 public void db_viewCheckpointsinZoneGroup(int client, char szSteamID[32], char szMapName[128], int zonegroup)
@@ -4703,6 +4758,28 @@ public void SQL_selectBonusCountCallback(Handle owner, Handle hndl, const char[]
 		g_totalBonusCount = 0;
 	}
 	SetSkillGroups();
+	/** Start Loading Server Settings:
+	* 1. Load zones (db_selectMapZones)
+	* 2. Get spawn locations (db_selectSpawnLocations)
+	* 3. Get map record time (db_GetMapRecord_Pro)
+	* 4. Get the amount of players that have finished the map (db_viewMapProRankCount)
+	* 5. Get the fastest bonus times (db_viewFastestBonus)
+	* 6. Get the total amount of players that have finsihed the bonus (db_viewBonusTotalCount)
+	* 7. Get map tier (db_selectMapTier)
+	* 8. Get record checkpoints (db_viewRecordCheckpointInMap)
+	* 9. Calculate average run time (db_CalcAvgRunTime)
+	* 10. Calculate averate bonus time (db_CalcAvgRunTimeBonus)
+	* 11. Calculate player count (db_CalculatePlayerCount)
+	* 12. Calculate player count with points (db_CalculatePlayersCountGreater0)  
+	* 13. Clear latest records (db_ClearLatestRecords)
+	* 14. Get dynamic timelimit (db_GetDynamicTimelimit)
+	* -> loadAllClientSettings
+	*/
+	if (!g_bRenaming && !g_bInTransactionChain/* && IsServerProcessing()*/)
+	{
+		
+		db_selectMapZones();
+	}
 }
 
 ////////////////////////////
@@ -5191,8 +5268,24 @@ public void SQL_selectMapZonesCallback(Handle owner, Handle hndl, const char[] e
 	if (hndl == null)
 	{
 		LogError("[%s] SQL Error (SQL_selectMapZonesCallback): %s", g_szChatPrefix, error);
+		// Clear old stage records
 		if (!g_bServerDataLoaded)
-			db_selectSpawnLocations();
+		{
+			for (int i = 0; i < CPLIMIT; i++)
+			{
+				g_StageRecords[i][srRunTime] = 9999999.0;
+				g_StageRecords[i][srLoaded] = false;
+				g_StageRecords[i][srCompletions] = 0;
+				g_StageRecords[i][srStartSpeed] = -1.0;
+				g_bStageIgnorePrehop[i] = false;
+				g_bStageAllowHighJumps[i] = false;
+			}
+		
+			// Start loading stages
+			g_bLoadingStages = true;
+			db_loadStageServerRecords(0);
+			return;
+		}
 		return;
 	}
 
@@ -5410,10 +5503,25 @@ public void SQL_selectMapZonesCallback(Handle owner, Handle hndl, const char[] e
 				if (g_mapZonesTypeCount[x][k] > 0)
 					g_mapZoneCountinGroup[x]++;
 		debug_msg("Ended selectMapZones");
+
+		// Clear old stage records
 		if (!g_bServerDataLoaded)
-			db_selectSpawnLocations();
+		{
+			for (int i = 0; i < CPLIMIT; i++)
+			{
+				g_StageRecords[i][srRunTime] = 9999999.0;
+				g_StageRecords[i][srLoaded] = false;
+				g_StageRecords[i][srCompletions] = 0;
+				g_StageRecords[i][srStartSpeed] = -1.0;
+				g_bStageIgnorePrehop[i] = false;
+				g_bStageAllowHighJumps[i] = false;
+			}
 		
-		return;
+			// Start loading stages
+			g_bLoadingStages = true;
+			db_loadStageServerRecords(0);
+			return;
+		}
 	}
 }
 
@@ -6309,12 +6417,21 @@ public void SQL_InsertPlayerCallBack(Handle owner, Handle hndl, const char[] err
 	{
 		LogError("[%s] SQL Error (SQL_InsertPlayerCallBack): %s", g_szChatPrefix, error);
 		return;
-	}
-	SQL_TQuery(g_hDb, SQL_CheckCallback, "INSERT INTO ck_ranks (points,num) VALUES (0,1) ON DUPLICATE KEY UPDATE num = num + 1;", DBPrio_Low);
+	}// INSERT INTO ck_ranks (points,num) VALUES (0,1) ON DUPLICATE KEY UPDATE num = num + 1;
+	SQL_TQuery(g_hDb, SQL_InsertNewRanksCallBack, "INSERT INTO ck_ranks (points,num) VALUES (0,1) ON DUPLICATE KEY UPDATE num = num + 1;", data, DBPrio_Low );
 	debug_msg("INSERT INTO ck_ranks (points,num) VALUES (0,1) ON DUPLICATE KEY UPDATE num = num + 1;");
-	
-	if (IsClientInGame(data))
-		db_UpdateLastSeen(data);
+
+}
+
+public void SQL_InsertNewRanksCallBack(Handle owner, Handle hndl, const char[] error, any data)
+{
+	if (hndl == null)
+	{
+		LogError("[%s] SQL Error (SQL_InsertNewRanksCallBack): %s", g_szChatPrefix, error);
+		return;
+	}
+	db_GetPlayerRank(data);
+	RequestFrame(SetClanTag, GetClientSerial(data));
 }
 
 public void db_UpdateLastSeen(int client)
@@ -7317,4 +7434,314 @@ public void db_SelectTotalMapCompletesUnknownCallback(Handle owner, Handle hndl,
 	}
 	else
 		PrintToChat(client, "[%c%s%c] No result found for player or map", MOSSGREEN, g_szChatPrefix, WHITE);
+}
+
+
+
+////////////////////////
+//// WRCP Records  /////
+////////////////////////
+
+
+public void db_insertStageRecord(int client, int stage, float runtime)
+{
+		char query[256];
+		Format(query, sizeof(query), sql_insertStageRecord, g_szSteamID[client], g_szMapName, stage, runtime, g_fPlayerCurrentStartSpeed[client][stage]);
+
+		DataPack pack = new DataPack();
+
+		pack.WriteCell(client);
+		pack.WriteCell(stage);
+
+		SQL_TQuery(g_hDb, sql_insertStageRecordCallback, query, pack, DBPrio_High);
+		debug_msg(query);
+}
+
+public void sql_insertStageRecordCallback(Handle owner, Handle hndl, const char[] error, any data)
+{
+	if (hndl == null)
+	{
+		LogError("[%s] SQL Error (sql_insertStageRecordCallback): %s",g_szChatPrefix, error);
+		return;
+	}
+
+	DataPack pack = view_as<DataPack>(data);
+	pack.Reset();
+	int client = pack.ReadCell();
+	int stage = pack.ReadCell();
+
+	db_updateStageRank(client, stage);
+
+	g_StageRecords[stage][srCompletions]++;
+}
+
+
+public void db_updateStageRecord(int client, int stage, float runtime)
+{
+	char query[256];
+	Format(query, sizeof(query), sql_updateStageRecord, runtime, g_fPlayerCurrentStartSpeed[client][stage], g_szMapName, g_szSteamID[client], stage);
+
+	DataPack pack = new DataPack();
+
+	pack.WriteCell(client);
+	pack.WriteCell(stage);
+
+	SQL_TQuery(g_hDb, sql_updateStageRecordCallback, query, pack, DBPrio_High);
+	debug_msg(query);
+}
+
+public void sql_updateStageRecordCallback(Handle owner, Handle hndl, const char[] error, any data)
+{
+	if (hndl == null)
+	{
+		LogError("[%s] SQL Error (sql_updateStageRecordCallback): %s",g_szChatPrefix, error);
+		return;
+	}
+
+	DataPack pack = view_as<DataPack>(data);
+	pack.Reset();
+	int client = pack.ReadCell();
+	int stage = pack.ReadCell();
+
+	// Update Rank
+	db_updateStageRank(client, stage);
+}
+
+
+
+// todo: load all stages in 1 query
+public void db_loadStageServerRecords(int stage)
+{
+	char query[512];
+	Format(query, sizeof(query), sql_selectStageRecords, g_szMapName, stage, g_szMapName, stage);
+	SQL_TQuery(g_hDb, sql_loadStageServerRecordsCallback, query, stage, DBPrio_Low);
+	debug_msg(query);
+}
+
+public void sql_loadStageServerRecordsCallback(Handle owner, Handle hndl, const char[] error, any data)
+{
+	if (hndl == null)
+	{
+		LogError("[%s] SQL Error (sql_loadStageServerRecordsCallback): %s",g_szChatPrefix, error);
+		return;
+	}
+
+	if (SQL_HasResultSet(hndl) && SQL_FetchRow(hndl))
+	{
+		int stage = SQL_FetchInt(hndl, 0);
+		float runtime = SQL_FetchFloat(hndl, 1);
+		char name[45];
+		SQL_FetchString(hndl, 2, name, sizeof(name));
+		int completions = SQL_FetchInt(hndl, 3);
+		float startSpeed = SQL_FetchFloat(hndl, 4);
+
+		g_StageRecords[stage][srRunTime] = runtime;
+		g_StageRecords[stage][srLoaded] = true;
+		g_StageRecords[stage][srCompletions] = completions;
+		g_StageRecords[stage][srStartSpeed] = startSpeed;
+
+		strcopy(g_StageRecords[stage][srPlayerName], sizeof(name), name);
+	}
+
+
+	if (data > g_mapZonesTypeCount[0][3])
+			g_bLoadingStages = false;
+
+
+	// Check if we are still loading the stages
+	if (g_bLoadingStages)
+	{
+		db_loadStageServerRecords(data+1);
+		return;
+	}
+	if (!g_bServerDataLoaded)
+		db_selectSpawnLocations();
+	
+}
+
+public void db_loadStagePlayerRecords(int client)
+{
+	 char query[256];
+	 Format(query, sizeof(query), sql_selectStagePlayerRecords, g_szMapName, g_szSteamID[client]);
+	 SQL_TQuery(g_hDb, sql_selectStagePlayerRecordsCallback, query, client, DBPrio_Low);
+	 debug_msg(query);
+}
+
+public void sql_selectStagePlayerRecordsCallback(Handle owner, Handle hndl, const char[] error, any data)
+{
+	if (hndl == null)
+	{
+		LogError("[%s] SQL Error (sql_selectStagePlayerRecordsCallback): %s",g_szChatPrefix, error);
+		return;
+	}
+
+	int client = data;
+
+	if (SQL_HasResultSet(hndl))
+	{
+		while(SQL_FetchRow(hndl))
+		{
+			int stage = SQL_FetchInt(hndl, 0);
+			float runtime = SQL_FetchFloat(hndl, 1);
+			int rank = SQL_FetchInt(hndl, 3);
+			float startSpeed = SQL_FetchFloat(hndl, 4);
+
+			g_fStagePlayerRecord[client][stage] = runtime;
+			g_StagePlayerRank[client][stage] = rank;
+			g_fPlayerStageRecStartSpeed[client][stage] = startSpeed;
+		}
+	}
+	if (!g_bSettingsLoaded[client])
+	{
+		//db_getChatTags(client);
+		g_bSettingsLoaded[client] = true;
+		g_bLoadingSettings[client] = false;
+		if (GetConVarBool(g_hTeleToStartWhenSettingsLoaded))
+		{
+			Command_Restart(client, 1);	
+			PrintToChat(client, "[%c%s%c] Your settings have been loaded. You may now begin your run.", MOSSGREEN, g_szChatPrefix, WHITE);
+
+			ClientCommand(client, "play buttons\\weapon_confirm.wav");
+			
+		}
+		char buffer[412];
+		Format(buffer, 412, "Finished Loading: %N on map: %s", client, g_szMapName);
+		debug_msg(buffer);	
+		// Seach for next client to load
+		for (int i = 1; i < MAXPLAYERS + 1; i++)
+		{
+			if (IsValidClient(i) && !IsFakeClient(i) && !g_bSettingsLoaded[i] && !g_bLoadingSettings[i])
+			{
+				Format(buffer, 412, "Started Loading: %N on map: %s", i, g_szMapName);
+				debug_msg(buffer);	
+				char szSteamID[32];
+				GetClientAuthId(i, AuthId_Steam2, szSteamID, 32, true);
+				db_viewPersonalRecords(i, szSteamID, g_szMapName);
+				g_bLoadingSettings[i] = true;
+				break;
+			}
+		}
+	}		
+}
+
+public void db_viewStageRecords(int client, int stage)
+{
+
+	char query[256];
+	Format(query, sizeof(query), sql_viewStageTop, stage, g_szMapName);
+	SQL_TQuery(g_hDb, sql_viewStageRecordsCallback, query, client, DBPrio_Low);
+	debug_msg(query);
+}
+
+public void sql_viewStageRecordsCallback(Handle owner, Handle hndl, const char[] error, any data)
+{
+
+	if (hndl == null)
+	{
+		LogError("[%s] SQL Error (sql_viewStageRecordsCallback): %s",g_szChatPrefix, error);
+		return;
+	}
+
+	int client = data;
+
+	if (SQL_HasResultSet(hndl))
+	{
+		Menu menu = new Menu(ViewStageRecordsMenuCallback);
+		menu.SetTitle("Stage records:\n    Rank   Time              Player");
+		int rank = 1;
+
+		while(SQL_FetchRow(hndl))
+		{
+			char name[32], steamid[32];
+			SQL_FetchString(hndl, 0, name, sizeof(name));
+			float runtime = SQL_FetchFloat(hndl, 1);
+			SQL_FetchString(hndl, 2, steamid, sizeof(steamid));
+
+			char runtime_str[32];
+			FormatTimeFloat(client, runtime, 5, runtime_str, sizeof(runtime_str));
+
+			char display[128];
+
+			if (rank < 10)
+				Format(display, sizeof(display), "[0%i.] %s    » %s", rank, runtime_str, name);
+			else
+				Format(display, sizeof(display), "[%i.] %s    » %s", rank, runtime_str, name);
+
+			menu.AddItem(steamid, display);
+
+			rank++;
+		}
+
+		menu.Display(client, 60);
+	}
+}
+
+public int ViewStageRecordsMenuCallback(Menu menu, MenuAction action, int param1, int param2)
+{
+	if (action == MenuAction_Select)
+	{
+		char info[32];
+		GetMenuItem(menu, param2, info, sizeof(info));
+		g_MenuLevel[param1] = -1;
+		db_viewPlayerRank(param1, info);
+	}
+}
+
+
+public void db_updateStageRank(int client, int stage)
+{
+	char query[256];
+	Format(query, sizeof(query), "SELECT COUNT(*) FROM ck_stages WHERE runtime <= (SELECT runtime FROM ck_stages WHERE map = '%s' and stage = '%d' AND steamid = '%s') AND map = '%s' AND stage = '%d' ORDER BY runtime, date ASC;", g_szMapName, stage, g_szSteamID[client], g_szMapName, stage);
+
+	DataPack data = new DataPack();
+	data.WriteCell(client);
+	data.WriteCell(stage);
+
+	SQL_TQuery(g_hDb, SQL_updateStageRankCallback, query, data, DBPrio_Low);
+	debug_msg(query);
+}
+
+
+public void SQL_updateStageRankCallback(Handle owner, Handle hndl, const char[] error, any data)
+{
+
+	if (hndl == null)
+	{
+		LogError("[%s] SQL Error (SQL_updateStageRankCallback): %s", g_szChatPrefix, error);
+		return;
+	}
+
+	int rank = -1;
+
+	if (SQL_HasResultSet(hndl) && SQL_FetchRow(hndl))
+	{
+		rank = SQL_FetchInt(hndl, 0);
+
+		DataPack pack = view_as<DataPack>(data);
+		pack.Reset();
+		int client = pack.ReadCell();
+		int stage = pack.ReadCell();
+
+		// Check if the player improved his time
+		if (rank != -1 && rank < g_StagePlayerRank[client][stage])
+			PrintToChat(client, "[%c%s%c] %cYou improved your time, your rank is now %c%d/%d", MOSSGREEN,g_szChatPrefix, WHITE, GRAY, LIMEGREEN, rank, g_StageRecords[stage][srCompletions]);
+			
+		g_StagePlayerRank[client][stage] = rank;
+
+		// Format time
+		char runtime_str[32];
+		FormatTimeFloat(client, g_fStagePlayerRecord[client][stage], 5, runtime_str, sizeof(runtime_str));
+
+		g_pr_showmsg[client] = true;
+		CalculatePlayerRank(client);
+
+		/* / Forward
+		Call_StartForward(g_StageFinishedForward);
+		Call_PushCell(client);
+		Call_PushFloat(g_fStagePlayerRecord[client][stage]);
+		Call_PushString(runtime_str);
+		Call_PushCell(stage);
+		Call_PushCell(rank);
+		Call_Finish();*/
+	}
 }

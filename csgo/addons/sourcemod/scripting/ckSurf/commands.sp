@@ -2407,9 +2407,10 @@ public void ckTopMenu(int client)
 	menu.SetTitle("ckSurf - Top Menu");
 	if (g_hPointSystem.BoolValue)
 		menu.AddItem("Top 100 Players", "Top 100 Players");
-	menu.AddItem("Top 5 Challengers", "Top 5 Challengers", false); //fkn stupid sql query disableed until we fix the query
+	//menu.AddItem("Top 5 Challengers", "Top 5 Challengers", false); //fkn stupid sql query disableed until we fix the query
 	menu.AddItem("Map Top", "Map Top");
 	menu.AddItem("Bonus Top", "Bonus Top", !g_bhasBonus);
+	menu.AddItem("Stage Top", "Stage Top", !g_bhasStages);
 	menu.OptionFlags = MENUFLAG_BUTTON_EXIT;
 	menu.Display(client, MENU_TIME_FOREVER);
 }
@@ -2427,19 +2428,21 @@ public int TopMenuHandler(Menu menu, MenuAction action, int param1, int param2)
 			switch (param2)
 			{
 				case 0:db_selectTopPlayers(param1);
-				case 1:db_selectTopChallengers(param1);
-				case 2:db_selectTopSurfers(param1, g_szMapName);
-				case 3:BonusTopMenu(param1);
+				//case 1:db_selectTopChallengers(param1); TODO
+				case 1:db_selectTopSurfers(param1, g_szMapName);
+				case 2:BonusTopMenu(param1);
+				case 3:StageTopMenu(param1);
 			}
 		}
 		else
 		{
 			switch (param2)
 			{
-				case 0:db_selectTopChallengers(param1);
-				case 1:db_selectTopProRecordHolders(param1);
-				case 2:db_selectTopSurfers(param1, g_szMapName);
-				case 3:BonusTopMenu(param1);
+				//case 0:db_selectTopChallengers(param1);
+				//case 0:db_selectTopProRecordHolders(param1);
+				case 0:db_selectTopSurfers(param1, g_szMapName);
+				case 1:BonusTopMenu(param1);
+				case 2:StageTopMenu(param1);
 			}
 		}
 	}
@@ -3208,5 +3211,155 @@ public Action Command_SelectMapTime(int client, int args)
 		else
 			db_selectMapRank(client, szSteamId2, arg2);
 	}
+	return Plugin_Handled;
+}
+public Action Client_StageTop(int client, int args)
+{
+	if (!g_bhasStages)
+		return Plugin_Handled;
+
+	StageTopMenu(client);
+	return Plugin_Continue;
+}
+//TODO
+public void StageTopMenu(int client)
+{
+	Menu menu = new Menu(StageTopMenuHandler);
+
+	menu.SetTitle("Stage Records: Select stage");
+
+
+	for (int i = 1; i <= g_mapZonesTypeCount[0][3] + 1; i++)
+	{
+		char name[32];
+		Format(name, sizeof(name), "Stage %d", i);
+
+		menu.AddItem(name, name);
+	}
+
+	menu.Display(client, 60);
+}
+
+public int StageTopMenuHandler(Menu menu, MenuAction action, int param1, int param2)
+{
+	if (action != MenuAction_Select) return 0;
+
+	db_viewStageRecords(param1, param2+1);
+
+	return 0;
+}
+
+public Action Client_MapStats(int client, int args)
+{
+	if (IsValidClient(client))
+	{	
+		char szItem[4];
+		char szValue[128];
+		// char szTime[32];
+		char szSteamId[32];
+		getSteamIDFromClient(client, szSteamId, 32);
+		int i;
+
+		Menu mapInfoMenu = new Menu(MapStatsHandler);
+		mapInfoMenu.Pagination = 10;
+
+		//Adds map time
+
+		if (g_fPersonalRecord[client] > 0.0) {
+			Format(szValue, 128, "[Map Time]: %s | Rank: %i/%i", g_szPersonalRecord[client], g_MapRank[client], g_MapTimesCount);
+			mapInfoMenu.AddItem("0", szValue, ITEMDRAW_DEFAULT);
+		}
+		else
+			mapInfoMenu.AddItem("0", "Map Time: None", ITEMDRAW_DISABLED);
+
+		// Counts stages and creates strings
+		int stageCount = (g_mapZonesTypeCount[g_iClientInZone[client][2]][3]) + 1;
+		Handle stringArray = CreateArray(stageCount);
+	
+		if (g_bhasStages) {
+			for (i= 1; i<=stageCount; i++) {
+				Format(szItem, sizeof(szItem), "%d", i);
+				float stageTime = g_fStagePlayerRecord[client][i];
+				// Format(szTime, 32, "Time: %f", stageTime);
+				if (stageTime < 99999.0) {
+					Format(szValue, 128, "Stage %i: %.2f | Rank: %i/%i", (i), stageTime, g_StagePlayerRank[client][i], g_StageRecords[i][srCompletions]);
+					mapInfoMenu.AddItem(szItem, szValue, ITEMDRAW_DEFAULT);
+				}
+				else {
+					Format(szValue, 128, "Stage %i: None", i);
+					mapInfoMenu.AddItem(szItem, szValue, ITEMDRAW_DISABLED);
+				}
+				PushArrayString(stringArray, szValue);
+			}
+		}
+
+
+		for (i = 1; i < g_mapZoneGroupCount; i++) {
+			Format(szItem, sizeof(szItem), "-%d", i);
+			float bonusTime = g_fPersonalRecordBonus[i][client];
+			if (bonusTime>0) {
+				Format(szValue, 128, "Bonus %i: %s | Rank: %i/%i", i, g_szPersonalRecordBonus[i][client], g_MapRankBonus[i][client], g_iBonusCount[i]);
+				mapInfoMenu.AddItem(szItem, szValue, ITEMDRAW_DEFAULT);
+			}
+			else {
+				Format(szValue, 128, "Bonus %i: None", i);
+				mapInfoMenu.AddItem(szItem, szValue, ITEMDRAW_DISABLED);
+			}
+		}
+
+		char title[64];
+		Format(title, 64, "Map Statistics");
+		mapInfoMenu.SetTitle(title);
+		mapInfoMenu.OptionFlags = MENUFLAG_BUTTON_EXIT;
+		mapInfoMenu.Display(client, MENU_TIME_FOREVER);
+		CloseHandle(stringArray);
+	}
+	return Plugin_Handled;
+}
+
+
+public int MapStatsHandler(Menu menu, MenuAction action, int param1, int param2) {
+	if (action != MenuAction_Select)
+		return 0;
+
+	char szItem[4];
+	menu.GetItem(param2, szItem, sizeof(szItem));
+	int id = StringToInt(szItem);
+
+
+	//PrintToChat(param1, "item: %d id: %d", szItem, id);
+	// Map records
+	if (id == 0)
+		db_selectMapTopSurfers(param1, g_szMapName);
+	else if (id > 0)
+		db_viewStageRecords(param1, id);
+	else if (id < 0)
+		db_viewStageRecords(param1, id * -1);
+
+	return 0;
+}
+
+public Action Command_Repeat(int client, int args) {
+	if (g_RepeatStage[client] != -1) {
+		g_RepeatStage[client] = -1;
+		PrintToChat(client, "[%c%s%c] Repeat mode is now disabled.", MOSSGREEN,g_szChatPrefix, WHITE);
+		return Plugin_Handled;
+	}
+
+	// Check if player is in a bonus
+	if (g_iClientInZone[client][2] != 0) {
+		PrintToChat(client, "[%c%s%c] This command is not available in bonus.", MOSSGREEN,g_szChatPrefix, WHITE);
+		return Plugin_Handled;
+	}
+
+	// Check if its not a staged map
+	if (!g_bhasStages) {
+		PrintToChat(client, "[%c%s%c] This command is not available in linear maps.", MOSSGREEN,g_szChatPrefix, WHITE);
+		return Plugin_Handled;
+	}
+
+
+	g_RepeatStage[client] = g_Stage[0][client];
+	PrintToChat(client, "[%c%s%c] Repeating mode is now enabled, repeating stage %d", MOSSGREEN, WHITE,g_szChatPrefix, g_RepeatStage[client]);
 	return Plugin_Handled;
 }

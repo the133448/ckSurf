@@ -37,7 +37,7 @@
 #pragma semicolon 1
 
 // Plugin info
-#define PLUGIN_VERSION "1.21.4.4"
+#define PLUGIN_VERSION "1.21.5"
 #define DEV_BUILD
 
 // Database definitions
@@ -191,6 +191,23 @@ enum SkillGroup
 	String:NameColor[32],			// Color to use for name if colored chatnames is turned on
 	String:RankName[128],			// Skillgroup name without colors
 	String:RankNameColored[128],	// Skillgroup name with colors
+}
+
+enum StageRecord
+{
+	String:srPlayerName[45],
+	Float:srRunTime[16],
+	srCompletions,
+	bool:srLoaded,
+	Float:srStartSpeed
+}
+
+
+enum RecordType
+{
+	RT_MAP,
+	RT_STAGE,
+	RT_BONUS
 }
 
 /*===================================
@@ -714,6 +731,8 @@ int g_PlayerRank[MAXPLAYERS + 1]; 								// Players server rank
 int g_MapRecordCount[MAXPLAYERS + 1];							// SR's the client has
 char g_pr_szName[MAX_PR_PLAYERS + 1][64];						// Used to update client's name in database
 char g_pr_szSteamID[MAX_PR_PLAYERS + 1][32];					// steamid of client being recalculated
+bool g_CalculatingPoints[MAXPLAYERS + 1];						// Used to ensure that 1 client cant have multiple recalcs in progress
+
 
 /*----------  Practice Mode  ----------*/
 float g_fCheckpointVelocity_undo[MAXPLAYERS + 1][3]; 			// Velocity at checkpoint that is on !undo
@@ -741,6 +760,38 @@ int g_Offset_m_fEffects = -1;
 
 // Rate Limiting Commands
 float g_fCommandLastUsed[MAXPLAYERS + 1];
+
+/*--------- Stage replays --------------*/
+int g_StageRecStartFrame[MAXPLAYERS+1];	// Number of frames where the replay started being recorded
+int g_StageRecStartAT[MAXPLAYERS+1];	// Ammount of additional teleport when the replay started being recorded
+float g_fStageInitialPosition[MAXPLAYERS + 1][3]; 					// Replay start position
+float g_fStageInitialAngles[MAXPLAYERS + 1][3]; 						// Replay start angle
+
+
+/*--------- Start Speed ----------------*/
+float g_fRecordStartSpeed[MAXZONEGROUPS];
+float g_fPlayerRectStartSpeed[MAXPLAYERS+1][MAXZONEGROUPS];
+float g_fPlayerStageRecStartSpeed[MAXPLAYERS+1][CPLIMIT];
+float g_fPlayerCurrentStartSpeed[MAXPLAYERS+1][CPLIMIT];
+
+
+/*-------- Stage Timers -------------*/
+bool g_bStageTimerRunning[MAXPLAYERS + 1];
+float g_fStageStartTime[MAXPLAYERS + 1];
+float g_fStagePlayerRecord[MAXPLAYERS + 1][64];
+bool g_bLoadingStages;
+int g_StageRecords[CPLIMIT][StageRecord];
+int g_StagePlayerRank[MAXPLAYERS+1][CPLIMIT];
+int g_RepeatStage[MAXPLAYERS+1] = {-1, ...};
+bool g_bStageIgnorePrehop[CPLIMIT];
+float g_fStageMaxVelocity[CPLIMIT];
+bool g_bStageAllowHighJumps[CPLIMIT];
+
+int g_PlayerJumpsInStage[MAXPLAYERS+1];
+bool g_bPlayerIsJumping[MAXPLAYERS+1];
+
+float g_vLastGroundTouch[MAXPLAYERS+1][3];
+
 
 /*=========================================
 =            Predefined arrays            =
@@ -887,28 +938,7 @@ public void OnMapStart()
 	int lastPiece = ExplodeString(g_szMapName, "/", mapPieces, sizeof(mapPieces), sizeof(mapPieces[]));
 	Format(g_szMapName, sizeof(g_szMapName), "%s", mapPieces[lastPiece - 1]);
 
-	/** Start Loading Server Settings:
-	* 1. Load zones (db_selectMapZones)
-	* 2. Get spawn locations (db_selectSpawnLocations)
-	* 3. Get map record time (db_GetMapRecord_Pro)
-	* 4. Get the amount of players that have finished the map (db_viewMapProRankCount)
-	* 5. Get the fastest bonus times (db_viewFastestBonus)
-	* 6. Get the total amount of players that have finsihed the bonus (db_viewBonusTotalCount)
-	* 7. Get map tier (db_selectMapTier)
-	* 8. Get record checkpoints (db_viewRecordCheckpointInMap)
-	* 9. Calculate average run time (db_CalcAvgRunTime)
-	* 10. Calculate averate bonus time (db_CalcAvgRunTimeBonus)
-	* 11. Calculate player count (db_CalculatePlayerCount)
-	* 12. Calculate player count with points (db_CalculatePlayersCountGreater0)  
-	* 13. Clear latest records (db_ClearLatestRecords)
-	* 14. Get dynamic timelimit (db_GetDynamicTimelimit)
-	* -> loadAllClientSettings
-	*/
-	if (!g_bRenaming && !g_bInTransactionChain/* && IsServerProcessing()*/)
-	{
-		
-		db_selectMapZones();
-	}
+	//Server Settings Load after the skillgroups are calculated.
 
 	//get map tag
 	ExplodeString(g_szMapName, "_", g_szMapPrefix, 2, 32);
@@ -1115,7 +1145,7 @@ public void OnClientPutInServer(int client)
 	FixPlayerName(client);
 	
 	//position restoring
-	if (g_hcvarRestore.BoolValue && !g_bRenaming && !g_bInTransactionChain)
+	if (g_hcvarRestore.BoolValue && !g_bRenaming && !g_bInTransactionChain && g_bServerDataLoaded)
 		db_selectLastRun(client);
 	
 	//console info
@@ -2002,7 +2032,11 @@ public void OnPluginStart()
 
 	//RegConsoleCmd("sm_rtimes", Command_rTimes, "[%s] spawns a usp silencer", g_szChatPrefix);
 
-	//client commands
+	//client commands Command_Repeat
+	RegConsoleCmd("sm_repeat", Command_Repeat, "[ckSurf] Prints a players map record in chat");
+	RegConsoleCmd("sm_cptop", Client_StageTop, "[ckSurf] Prints a players map record in chat");
+	RegConsoleCmd("sm_stats", Client_MapStats, "[ckSurf] Prints a players map record in chat");
+	RegConsoleCmd("sm_stats", Client_MapStats, "[ckSurf] Prints a players map record in chat");
 	RegConsoleCmd("sm_mrank", Command_SelectMapTime, "[ckSurf] Prints a players map record in chat");
 	RegConsoleCmd("sm_triggers", Command_ToggleTriggers, "[ckSurf] Toggle display of map triggers");
 	RegConsoleCmd("sm_showtriggers", Command_ToggleTriggers, "[ckSurf] Toggle display of map triggers");
