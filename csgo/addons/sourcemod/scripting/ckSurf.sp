@@ -37,7 +37,7 @@
 #pragma semicolon 1
 
 // Plugin info
-#define PLUGIN_VERSION "1.21.5"
+#define PLUGIN_VERSION "1.21.5.4"
 #define DEV_BUILD
 
 // Database definitions
@@ -498,6 +498,7 @@ ConVar g_hMultiServerMapcycle = null;							// Use multi server mapcycle
 ConVar g_hCustomHud = null;										// Use new style hud or old.
 ConVar g_hMultiServerAnnouncements = null;						// Announce latest records made on another server
 ConVar g_hDebugMode = null;										// Log Debug Messages
+ConVar g_hStagePoints = null;
 ConVar g_hFootsteps = null;
 
 
@@ -762,15 +763,15 @@ int g_Offset_m_fEffects = -1;
 float g_fCommandLastUsed[MAXPLAYERS + 1];
 
 /*--------- Stage replays --------------*/
-int g_StageRecStartFrame[MAXPLAYERS+1];	// Number of frames where the replay started being recorded
-int g_StageRecStartAT[MAXPLAYERS+1];	// Ammount of additional teleport when the replay started being recorded
-float g_fStageInitialPosition[MAXPLAYERS + 1][3]; 					// Replay start position
-float g_fStageInitialAngles[MAXPLAYERS + 1][3]; 						// Replay start angle
+//int g_StageRecStartFrame[MAXPLAYERS+1];	// Number of frames where the replay started being recorded
+//int g_StageRecStartAT[MAXPLAYERS+1];	// Ammount of additional teleport when the replay started being recorded
+//float g_fStageInitialPosition[MAXPLAYERS + 1][3]; 					// Replay start position
+//float g_fStageInitialAngles[MAXPLAYERS + 1][3]; 						// Replay start angle
 
 
 /*--------- Start Speed ----------------*/
-float g_fRecordStartSpeed[MAXZONEGROUPS];
-float g_fPlayerRectStartSpeed[MAXPLAYERS+1][MAXZONEGROUPS];
+//float g_fRecordStartSpeed[MAXZONEGROUPS];
+//float g_fPlayerRectStartSpeed[MAXPLAYERS+1][MAXZONEGROUPS];
 float g_fPlayerStageRecStartSpeed[MAXPLAYERS+1][CPLIMIT];
 float g_fPlayerCurrentStartSpeed[MAXPLAYERS+1][CPLIMIT];
 
@@ -783,14 +784,14 @@ bool g_bLoadingStages;
 int g_StageRecords[CPLIMIT][StageRecord];
 int g_StagePlayerRank[MAXPLAYERS+1][CPLIMIT];
 int g_RepeatStage[MAXPLAYERS+1] = {-1, ...};
-bool g_bStageIgnorePrehop[CPLIMIT];
-float g_fStageMaxVelocity[CPLIMIT];
-bool g_bStageAllowHighJumps[CPLIMIT];
+//bool g_bStageIgnorePrehop[CPLIMIT];
+//float g_fStageMaxVelocity[CPLIMIT];
+//bool g_bStageAllowHighJumps[CPLIMIT];
 
-int g_PlayerJumpsInStage[MAXPLAYERS+1];
-bool g_bPlayerIsJumping[MAXPLAYERS+1];
+//int g_PlayerJumpsInStage[MAXPLAYERS+1];
+//bool g_bPlayerIsJumping[MAXPLAYERS+1];
 
-float g_vLastGroundTouch[MAXPLAYERS+1][3];
+//float g_vLastGroundTouch[MAXPLAYERS+1][3];
 
 
 /*=========================================
@@ -1813,6 +1814,8 @@ public void OnPluginStart()
 	CreateConVar("ckSurf_version", PLUGIN_VERSION, "ckSurf Version", FCVAR_DONTRECORD | FCVAR_SPONLY | FCVAR_REPLICATED | FCVAR_NOTIFY);
 
 	g_hDebugMode = CreateConVar("ck_debug_mode", "0", "Log Debug Messages", FCVAR_NOTIFY, true, 0.0, true, 1.0);
+	
+	g_hStagePoints = CreateConVar("ck_stage_finish_points", "0", "Whether to reward points to players after finishing a stage.", FCVAR_NOTIFY, true, 0.0, true, 1.0);
 
 	g_hChatPrefix = CreateConVar("ck_chat_prefix", "SURF", "Determines the prefix used for chat messages", FCVAR_NOTIFY);
 	g_hAutoZoneHeight = CreateConVar("ck_autozone_height", "66.0", "Sets the automatic height for autozoning", FCVAR_NOTIFY, true, 0.0, true, 500.0);

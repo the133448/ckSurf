@@ -1699,12 +1699,18 @@ public void sql_CountFinishedMapsCallback(Handle owner, Handle hndl, const char[
 	g_pr_finishedmaps_perc[client] = (float(finishedMaps) / float(g_pr_MapCount)) * 100.0;
 	// Points gained from finishing maps for the first time
 	g_pr_points[client] += (finishedMaps * GetConVarInt(g_hExtraPoints2));
-
-	// Next up, calculate stage points:
-	char szQuery[512];
-	Format(szQuery, 512, "SELECT map, (SELECT count(1)+1 FROM ck_stages b WHERE a.map=b.map AND a.runtime > b.runtime AND a.stage = b.stage) AS rank, (SELECT count(1) FROM ck_stages b WHERE a.map = b.map AND a.stage = b.stage) as total FROM ck_stages a WHERE steamid = '%s';", szSteamId);
-	SQL_TQuery(g_hDb, sql_CountFinishedStagesCallback, szQuery, client, DBPrio_Low);
-	debug_msg(szQuery);
+	if(g_hStagePoints.BoolValue)
+	{
+		// Next up, calculate stage points:
+		char szQuery[512];
+		Format(szQuery, 512, "SELECT map, (SELECT count(1)+1 FROM ck_stages b WHERE a.map=b.map AND a.runtime > b.runtime AND a.stage = b.stage) AS rank, (SELECT count(1) FROM ck_stages b WHERE a.map = b.map AND a.stage = b.stage) as total FROM ck_stages a WHERE steamid = '%s';", szSteamId);
+		SQL_TQuery(g_hDb, sql_CountFinishedStagesCallback, szQuery, client, DBPrio_Low);
+		debug_msg(szQuery);
+		return;
+	} 
+	// Done checking, update points
+	db_updatePoints(client);
+	
 }
 //
 // 6. Getting points from stage records
@@ -5277,8 +5283,8 @@ public void SQL_selectMapZonesCallback(Handle owner, Handle hndl, const char[] e
 				g_StageRecords[i][srLoaded] = false;
 				g_StageRecords[i][srCompletions] = 0;
 				g_StageRecords[i][srStartSpeed] = -1.0;
-				g_bStageIgnorePrehop[i] = false;
-				g_bStageAllowHighJumps[i] = false;
+				//g_bStageIgnorePrehop[i] = false;
+				//g_bStageAllowHighJumps[i] = false;
 			}
 		
 			// Start loading stages
@@ -5504,7 +5510,7 @@ public void SQL_selectMapZonesCallback(Handle owner, Handle hndl, const char[] e
 					g_mapZoneCountinGroup[x]++;
 		debug_msg("Ended selectMapZones");
 
-		// Clear old stage records
+		// Clear old stage records TODO
 		if (!g_bServerDataLoaded)
 		{
 			for (int i = 0; i < CPLIMIT; i++)
@@ -5513,8 +5519,8 @@ public void SQL_selectMapZonesCallback(Handle owner, Handle hndl, const char[] e
 				g_StageRecords[i][srLoaded] = false;
 				g_StageRecords[i][srCompletions] = 0;
 				g_StageRecords[i][srStartSpeed] = -1.0;
-				g_bStageIgnorePrehop[i] = false;
-				g_bStageAllowHighJumps[i] = false;
+				//g_bStageIgnorePrehop[i] = false;
+				//g_bStageAllowHighJumps[i] = false;
 			}
 		
 			// Start loading stages
@@ -7722,9 +7728,9 @@ public void SQL_updateStageRankCallback(Handle owner, Handle hndl, const char[] 
 		int client = pack.ReadCell();
 		int stage = pack.ReadCell();
 
-		// Check if the player improved his time
+		// Check if the player improved his time 
 		if (rank != -1 && rank < g_StagePlayerRank[client][stage])
-			PrintToChat(client, "[%c%s%c] %cYou improved your time, your rank is now %c%d/%d", MOSSGREEN,g_szChatPrefix, WHITE, GRAY, LIMEGREEN, rank, g_StageRecords[stage][srCompletions]);
+			PrintToChat(client, "%t", "StageRankImproved", MOSSGREEN,g_szChatPrefix, WHITE, LIMEGREEN, stage, GRAY, LIMEGREEN, rank, GRAY, g_StageRecords[stage][srCompletions]);
 			
 		g_StagePlayerRank[client][stage] = rank;
 
@@ -7733,7 +7739,9 @@ public void SQL_updateStageRankCallback(Handle owner, Handle hndl, const char[] 
 		FormatTimeFloat(client, g_fStagePlayerRecord[client][stage], 5, runtime_str, sizeof(runtime_str));
 
 		g_pr_showmsg[client] = true;
-		CalculatePlayerRank(client);
+		
+		if(g_hStagePoints.BoolValue)
+			CalculatePlayerRank(client);
 
 		/* / Forward
 		Call_StartForward(g_StageFinishedForward);

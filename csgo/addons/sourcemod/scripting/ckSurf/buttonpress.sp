@@ -621,17 +621,15 @@ public void EndStageTimer(int client)
 
 
 	// Get formatted run time
-	char runtime_str[32];
-	FormatTimeFloat(client, runtime, 5, runtime_str, sizeof(runtime_str));
-
+	char runtime_str[32], srdiff_str[32], pbdiff_str[32];
+	FormatTimeFloat(client, runtime, 3, runtime_str, 32);
 
 	// Get record diff
 	float srdiff = g_StageRecords[stage][srRunTime] - runtime;
 	float pbdiff = g_fStagePlayerRecord[client][stage] - runtime;
-	char srdiff_str[32], pbdiff_str[32];
-
-	FormatTimeFloat(client, srdiff, 5, srdiff_str, sizeof(srdiff_str));
-	FormatTimeFloat(client, pbdiff, 5, pbdiff_str, sizeof(pbdiff_str));
+	
+	FormatTimeFloat(client, srdiff, 3, srdiff_str, 32);
+	FormatTimeFloat(client, pbdiff, 3, pbdiff_str, 32);
 
 	if (g_StageRecords[stage][srRunTime] != 9999999.0)
 	{
@@ -656,7 +654,8 @@ public void EndStageTimer(int client)
 	}
 	else
 		Format(pbdiff_str, sizeof(pbdiff_str), "N/A");
-
+	char szName[MAX_NAME_LENGTH];
+	GetClientName(client, szName, MAX_NAME_LENGTH);
 	// Check if the player beaten the record
 	if (g_StageRecords[stage][srRunTime] > runtime)
 	{
@@ -665,7 +664,9 @@ public void EndStageTimer(int client)
 		// Check if the stage records were loaded before sending the message
 		if (!g_bLoadingStages) {
 			// Send message to all players
-			PrintToChatAll("[%c%s%c] %c%N %chas beaten the %cStage %d Record! %cin %c%s ", MOSSGREEN,g_szChatPrefix, WHITE, LIMEGREEN, client, GRAY, LIMEGREEN, stage, GRAY, LIMEGREEN, runtime_str);
+			//{1:c},{2:s},{3:c},{4:c},{5:s},{6:c},{7:c},{8:D},{9:c},{10:c},{11:s},{12:c}
+			//[{1}{2}{3}] {4}{5} {6}has beaten the {7}Stage {8} Record! {9}With a time of ({10}{11}{12})"
+			PrintToChat(client, "%t", "StageRecord", MOSSGREEN,g_szChatPrefix, WHITE, LIMEGREEN, szName, GRAY, LIMEGREEN, stage, GRAY, LIMEGREEN, runtime_str, GRAY);
 
 			// Play sound to everyone
 			for (int i = 1; i <= MaxClients; i++)
@@ -697,8 +698,10 @@ public void EndStageTimer(int client)
 	else if (g_fStagePlayerRecord[client][stage] > runtime)
 	{
 		// Player beaten his own record
-
-		PrintToChat(client, "[%c%s%c] %cFinished %cStage %d %cin %c%s ", MOSSGREEN,g_szChatPrefix, WHITE, GRAY, LIMEGREEN, stage, GRAY, LIMEGREEN, runtime_str);
+		//"#format"   "{1:c},{2:s},{3:c},{4:c},{5:i},{6:c},{7:s},{8:c},{9:c},{10:s},{11:c},{12:c},{13:s}"
+		//"en"        "[{1}{2}{3}] {4}Stage {5} {6}{7} {8}({9}SR {10}{11}) Improving PB by {12}{13}"            
+		//                                         1          2               3      4          5      6          7            8      9           10         11    12    13
+		PrintToChat(client, "%t", "StageImproved", MOSSGREEN ,g_szChatPrefix ,WHITE ,YELLOW, stage, LIMEGREEN, runtime_str, GRAY, YELLOW, srdiff_str, GRAY, GREEN, pbdiff_str);
 
 		if (g_fStagePlayerRecord[client][stage] != 9999999.0)
 			db_updateStageRecord(client, stage, runtime);
@@ -711,7 +714,8 @@ public void EndStageTimer(int client)
 	else
 	{
 		// missed sr and pb
-		PrintToChat(client, "[%c%s%c] %cFinished %cStage %d %cin %c%s", MOSSGREEN,g_szChatPrefix, WHITE, GRAY, LIMEGREEN, stage, GRAY, LIMEGREEN, runtime_str);
+		PrintToChat(client, "%t", "StageFinished", MOSSGREEN ,g_szChatPrefix ,WHITE ,YELLOW, stage, LIMEGREEN, runtime_str, GRAY, YELLOW, srdiff_str, GRAY, RED, pbdiff_str);
+		
 		return;
 	}
 
