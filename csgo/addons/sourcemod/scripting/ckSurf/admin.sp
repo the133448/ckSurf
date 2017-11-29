@@ -348,6 +348,8 @@ public void OnAdminMenuReady(Handle topmenu)
 	g_hAdminMenu = topmenu;
 	TopMenuObject serverCmds = FindTopMenuCategory(g_hAdminMenu, ADMINMENU_SERVERCOMMANDS);
 	AddToTopMenu(g_hAdminMenu, "sm_ckadmin", TopMenuObject_Item, TopMenuHandler2, serverCmds, "sm_ckadmin", ADMFLAG_RCON);
+	AddToTopMenu(g_hAdminMenu, "sm_botfix", TopMenuObject_Item, TopMenuHandler3, INVALID_TOPMENUOBJECT, "sm_admin", ADMFLAG_GENERIC);
+	AddToTopMenu(g_hAdminMenu, "sm_reload", TopMenuObject_Item, TopMenuHandler4, INVALID_TOPMENUOBJECT, "sm_admin", ADMFLAG_GENERIC);
 }
 
 public int TopMenuHandler2(Handle topmenu, TopMenuAction action, TopMenuObject object_id, int param, char[] buffer, int maxlength)
@@ -358,6 +360,28 @@ public int TopMenuHandler2(Handle topmenu, TopMenuAction action, TopMenuObject o
 	else
 		if (action == TopMenuAction_SelectOption)
 		Admin_ckPanel(param, 0);
+}
+public int TopMenuHandler3(Handle topmenu, TopMenuAction action, TopMenuObject object_id, int param, char[] buffer, int maxlength)
+{
+	if (action == TopMenuAction_DisplayOption)
+		Format(buffer, maxlength, "%s | Restart Replay Bots",g_szChatPrefix );
+
+	else
+		if (action == TopMenuAction_SelectOption)
+		{
+			Admin_fixBot(param, 0);
+		}
+}
+public int TopMenuHandler4(Handle topmenu, TopMenuAction action, TopMenuObject object_id, int param, char[] buffer, int maxlength)
+{
+	if (action == TopMenuAction_DisplayOption)
+		Format(buffer, maxlength, "%s | Reload Map + Server.",g_szChatPrefix );
+
+	else
+		if (action == TopMenuAction_SelectOption)
+		{
+			Admin_ReloadMap(param, 0);
+		}
 }
 public Action Admin_ReloadMap(int client, int args)
 {
